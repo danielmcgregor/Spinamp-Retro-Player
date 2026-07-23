@@ -1,0 +1,666 @@
+@import "tailwindcss";
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--skin-accent, rgba(245, 158, 11, 0.5)) rgba(0, 0, 0, 0.3);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--skin-accent, rgba(245, 158, 11, 0.5));
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--skin-accent-hover, rgba(245, 158, 11, 0.8));
+}
+
+/* --- DYNAMIC SKIN COLOR PRESETS --- */
+
+/* Theme variables */
+:root {
+  --skin-bg: #1a1b1e;
+  --skin-bg-alt: #131416;
+  --skin-panel: #101113;
+  --skin-card: #1c1d21;
+  --skin-border: #2b2d31;
+  --skin-accent: #f59e0b;
+  --skin-accent-hover: #fbbf24;
+  --skin-accent-shadow: rgba(245, 158, 11, 0.25);
+  --skin-text: #d4d4d8;
+  --skin-text-muted: #71717a;
+}
+
+/* Theme definitions */
+.theme-steel {
+  /* Classic Spinamp Bento Slate Blue-Gray Theme */
+  --skin-bg: #23262f;          /* Authentic Spinamp Bento slate blue-gray chassis */
+  --skin-bg-alt: #14161d;      /* Deep recessed carbon-blue bay backgrounds */
+  --skin-panel: #090a0f;       /* Ultimate dark high-fidelity smoked display glass */
+  --skin-card: #2c313d;        /* Sleek modular component deck tiles */
+  --skin-border: #42495b;      /* Clean industrial metal seam guidelines */
+  --skin-accent: #ff9100;      /* Classic radiant Spinamp orange active status/LED glow */
+  --skin-accent-hover: #00ffff;/* High-fidelity electric cyan cooling peaks duality */
+  --skin-accent-shadow: rgba(255, 145, 0, 0.45);
+  --skin-text: #f1f5f9;        /* Silk-screened matte white lettering */
+  --skin-text-muted: #7a8599;  /* Muted blue-slate laser printed details */
+  --skin-card-text: #f8fafc;
+  --skin-card-text-muted: #6b7280;
+  --skin-panel-text: #ff9100;
+  --skin-panel-text-muted: #4b5563;
+}
+
+.theme-violet {
+  /* Midnight Royal Velvet console */
+  --skin-bg: #10051e;
+  --skin-bg-alt: #06010d;
+  --skin-panel: #000000;
+  --skin-card: #1d0a33;
+  --skin-border: #7c3aed;      /* glowing laser purple frame vectors */
+  --skin-accent: #d8b4fe;      /* Laser violet phosphor displays */
+  --skin-accent-hover: #00ffff;/* Cooling turquoise signal dials (gorgeous duality!) */
+  --skin-accent-shadow: rgba(124, 58, 237, 0.35);
+  --skin-text: #fae8ff;        /* Violet-kissed white text */
+  --skin-text-muted: #a78bfa;
+  --skin-card-text: #f5f3ff;
+  --skin-card-text-muted: #a78bfa;
+  --skin-panel-text: #d8b4fe;
+  --skin-panel-text-muted: #6366f1;
+}
+
+.theme-cobalt {
+  /* High-fidelity electric naval sound deck body */
+  --skin-bg: #061026;          /* High-integrity liquid sapphire polymer casing */
+  --skin-bg-alt: #010512;
+  --skin-panel: #000000;       /* Polished shiny black screen plate */
+  --skin-card: #11224d;        /* Brushed navy control faceplates */
+  --skin-border: #1d4ed8;      /* Liquid-mercury chrome blue guides */
+  --skin-accent: #00f2fe;      /* Luminescent retro cathode status lamps */
+  --skin-accent-hover: #f97316;/* Contrast heat indicators in searing thermal orange */
+  --skin-accent-shadow: rgba(0, 242, 254, 0.45);
+  --skin-text: #f0fafd;        /* Ice-tinted white screen lettering */
+  --skin-text-muted: #38bdf8;  /* Vivid cyan tactical labels */
+  --skin-card-text: #ffffff;
+  --skin-card-text-muted: #60a5fa;
+  --skin-panel-text: #00f2fe;
+  --skin-panel-text-muted: #1e3a8a;
+}
+
+.theme-toxic {
+  /* Stealth military carbon black reactor casing */
+  --skin-bg: #111317;
+  --skin-bg-alt: #06070a;
+  --skin-panel: #030405;       /* Cathode glass screens */
+  --skin-card: #1a1d24;        /* Rugged structural black titanium plates */
+  --skin-border: #22c55e;      /* Biohazard radioactive isotope border guidelines */
+  --skin-accent: #10b981;      /* Intense green nuclear level indicators */
+  --skin-accent-hover: #eab308;/* Alert! Uranium core heat hazard yellow indicator */
+  --skin-accent-shadow: rgba(16, 185, 129, 0.45);
+  --skin-text: #f0fdf4;        /* Silver spray-stenciled legends */
+  --skin-text-muted: #15803d;  /* Warning storage classified labels */
+  --skin-card-text: #f9fafb;
+  --skin-card-text-muted: #4b5563;
+  --skin-panel-text: #10b981;
+  --skin-panel-text-muted: #164e63;
+}
+
+.theme-vespa {
+  /* Vintage Italian racing enamel lacquer ivory */
+  --skin-bg: #f5ede0;
+  --skin-bg-alt: #e3d4bd;      /* Genuine natural cork/leather tray docks */
+  --skin-panel: #1b1916;       /* Black velvet gauge display console */
+  --skin-card: #faf6f0;        /* Soft enamel pristine control decks */
+  --skin-border: #a17042;      /* Polished copper and vintage brass details */
+  --skin-accent: #d97706;      /* Saturated amber-gold filament indicator rods */
+  --skin-accent-hover: #1d4ed8;/* Precision racing blue signal calibration locks */
+  --skin-accent-shadow: rgba(217, 119, 6, 0.35);
+  --skin-text: #2d1702;        /* Deep espresso printed lettering */
+  --skin-text-muted: #8c5b30;  /* Classic warm sepia scale labels */
+  --skin-card-text: #2d1702;
+  --skin-card-text-muted: #a17042;
+  --skin-panel-text: #fcd34d;
+  --skin-panel-text-muted: #78350f;
+}
+
+.theme-crimson {
+  /* Red Fury 4! Blazing ultra-aggressive high-impact pure red design with glowing hot layouts */
+  --skin-bg: #1c0205;          /* Menacing dark crimson-black polymer chassis */
+  --skin-bg-alt: #0a0001;      /* Recessed molten red-black depth chambers */
+  --skin-panel: #000000;       /* Midnight blackout touch cockpit display glass */
+  --skin-card: #2f0408;        /* Severe solid carbon-crimson structural tile blocks */
+  --skin-border: #ff0000;      /* Hyper-glowing radioactive molten pure red guidelines */
+  --skin-accent: #ff1234;      /* Searing neon red active signal peaks and active gauges */
+  --skin-accent-hover: #ffffff;/* Hot nuclear-white core peak sparks */
+  --skin-accent-shadow: rgba(255, 18, 52, 0.65);
+  --skin-text: #ffffff;        /* High-visibility pure white technical label text */
+  --skin-text-muted: #ff001c;  /* Burning crimson structural stamp lines */
+  --skin-card-text: #ffffff;   /* Screen-printed stark white text on red modules */
+  --skin-card-text-muted: #ff3b55; /* Hot light-crimson secondary data readings */
+  --skin-panel-text: #ff001c;  /* Glow red phosphor level bars */
+  --skin-panel-text-muted: #450004;
+}
+
+.theme-walnut {
+  /* Mastercraft oiled dark walnut wood panels with Champagne-gold card surfaces */
+  --skin-bg: #3f200c;
+  --skin-bg-alt: #1e0e04;      /* Deep recessed acoustic chambers */
+  --skin-panel: #130902;       /* Smoked amber tube display glass */
+  --skin-card: #ecc15c;        /* Luxurious physical Champagne-Gold aluminum plates! */
+  --skin-border: #a17036;      /* Brass bezel brackets and divider trims */
+  --skin-accent: #f97316;      /* Incandescent orange-red glass vacuum tubes glowing */
+  --skin-accent-hover: #059669;/* Tuning eye magical green indicator tube */
+  --skin-accent-shadow: rgba(249, 115, 22, 0.45);
+  --skin-text: #fdf4e4;        /* Soft ivory printed lettering on dark wood */
+  --skin-text-muted: #935a12;
+  --skin-card-text: #1a0f02;   /* Contrast black-enameled lettering on champagne plates */
+  --skin-card-text-muted: #784a0a;
+  --skin-panel-text: #ff842c;
+  --skin-panel-text-muted: #7c2d12;
+}
+
+.theme-synth {
+  /* Cyberpunk starry midnight outrun hull */
+  --skin-bg: #090214;
+  --skin-bg-alt: #020006;      /* Vacuum outrun storage lanes */
+  --skin-panel: #000000;       /* Polished digital terminal glass screen */
+  --skin-card: #16042b;        /* Laser-lit electric grid tiles */
+  --skin-border: #ff007f;      /* Supercharged laser pink plasma barriers */
+  --skin-accent: #00ffd5;      /* Retro turquoise glowing phosphor gas */
+  --skin-accent-hover: #facc15;/* Sunset yellow-orange peak signal spikes */
+  --skin-accent-shadow: rgba(0, 255, 213, 0.45);
+  --skin-text: #ffffff;        /* Vapor-white high-contrast markings */
+  --skin-text-muted: #d946ef;  /* Retro violet structural stamp text */
+  --skin-card-text: #ffffff;
+  --skin-card-text-muted: #a21caf;
+  --skin-panel-text: #00ffd5;
+  --skin-panel-text-muted: #1e1b4b;
+}
+
+.theme-hazard {
+  /* Bead-blasted military armored field case with hazard-warnings */
+  --skin-bg: #202124;
+  --skin-bg-alt: #0e0f10;
+  --skin-panel: #050607;
+  --skin-card: #2a2c30;        /* Riveted heavy ordnance plate panels */
+  --skin-border: #eab308;      /* Tactical high-vis danger-yellow/black striped trims */
+  --skin-accent: #fbbf24;      /* Sodium signal alert amber indicator digit tubes */
+  --skin-accent-hover: #ef4444;/* Warning zone red alert peak indicator pulses */
+  --skin-accent-shadow: rgba(234, 179, 8, 0.45);
+  --skin-text: #f1f5f9;        /* Off-white military tactical lettering */
+  --skin-text-muted: #ca8a04;  /* Stenciled category stamp markers */
+  --skin-card-text: #f8fafc;
+  --skin-card-text-muted: #ca8a04;
+  --skin-panel-text: #fbbf24;
+  --skin-panel-text-muted: #451a03;
+}
+
+/* Override styling of skin containers globally on matching active theme wrapper */
+.theme-steel, .theme-violet, .theme-cobalt, .theme-toxic, .theme-vespa, .theme-crimson, .theme-walnut, .theme-synth, .theme-hazard {
+  /* Override general backgrounds */
+  #spinamp-bento-skin-main,
+  #spinamp-bento-skin-main-landscape,
+  #spinamp-classic-skin-canvas,
+  #spinamp-classic-skin-canvas-landscape,
+  #active-applet-drawer {
+    background-color: var(--skin-bg) !important;
+    background-image: none !important;
+    color: var(--skin-text) !important;
+  }
+
+  #bento-logo-strip,
+  #bento-logo-strip-landscape,
+  #bento-workspace-tabs,
+  #bento-workspace-tabs-landscape,
+  .playlist-header-row,
+  .bento-tab-active {
+    background-color: var(--skin-bg-alt) !important;
+    border-color: var(--skin-border) !important;
+    color: var(--skin-text) !important;
+  }
+
+  #bento-led-screen,
+  #bento-led-screen-landscape,
+  #classic-display-dashboard,
+  #metadata-display-text,
+  #metadata-display-text-landscape,
+  #clock-readout-deck,
+  #clock-readout-deck-landscape,
+  #classic-clock,
+  #track-telemetry-strip-landscape,
+  #track-telemetry-strip {
+    background-color: var(--skin-panel) !important;
+    border-color: var(--skin-border) !important;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.8) !important;
+    color: var(--skin-panel-text, var(--skin-text)) !important;
+  }
+
+  #bento-progress-scrubber,
+  #bento-progress-scrubber-landscape,
+  #bento-sound-deck,
+  #bento-sound-deck-landscape,
+  #volume-fader-deck,
+  #volume-fader-deck-landscape,
+  #shuffle-repeat-actions,
+  #shuffle-repeat-actions-landscape,
+  #classic-seek-controller,
+  #classic-sound-controllers,
+  #classic-controls-deck,
+  .eq-slider-deck,
+  #bento-workspace-container,
+  #bento-workspace-container-landscape,
+  .playlist-wrapper-box {
+    background-color: var(--skin-card) !important;
+    border-color: var(--skin-border) !important;
+    color: var(--skin-card-text, var(--skin-text)) !important;
+  }
+
+  /* Target all general buttons, input fields, and select options under active themes */
+  button,
+  select,
+  input[type="text"],
+  #bento-workspace-container button,
+  #bento-workspace-container-landscape button {
+    background-color: var(--skin-card) !important;
+    border-color: var(--skin-border) !important;
+    color: var(--skin-card-text, var(--skin-text)) !important;
+  }
+
+  /* Text-muted class inside matching active themes handles cards and generic backgrounds respectively */
+  .text-zinc-500, .text-neutral-500, .text-zinc-400, .text-neutral-400, .text-slate-400 {
+    color: var(--skin-text-muted) !important;
+  }
+
+  /* Specific card text muted overrides */
+  #bento-progress-scrubber .text-zinc-500,
+  #bento-progress-scrubber .text-neutral-500,
+  #bento-progress-scrubber .text-zinc-400,
+  #bento-progress-scrubber-landscape .text-zinc-400,
+  #bento-sound-deck .text-zinc-400,
+  #bento-sound-deck-landscape .text-zinc-400,
+  #volume-fader-deck .text-zinc-400,
+  #volume-fader-deck-landscape .text-zinc-400,
+  #shuffle-repeat-actions .text-zinc-400,
+  #shuffle-repeat-actions-landscape .text-zinc-400,
+  #bento-workspace-container .text-zinc-400,
+  #bento-workspace-container .text-zinc-500,
+  #bento-workspace-container-landscape .text-zinc-400,
+  #bento-workspace-container-landscape .text-zinc-500,
+  .playlist-wrapper-box .text-zinc-400,
+  .playlist-wrapper-box .text-zinc-500 {
+    color: var(--skin-card-text-muted, var(--skin-text-muted)) !important;
+  }
+
+  /* Override interactive active accents and states */
+  .text-amber-500,
+  .text-amber-400,
+  .text-emerald-400,
+  .text-emerald-500,
+  .text-cyan-400,
+  .text-indigo-400,
+  .text-indigo-300 {
+    color: var(--skin-accent) !important;
+  }
+
+  .bg-amber-500,
+  .bg-emerald-500,
+  .bg-indigo-600 {
+    background-color: var(--skin-accent) !important;
+    background-image: none !important;
+    color: var(--skin-bg) !important;
+  }
+
+  .border-amber-500,
+  .border-indigo-700,
+  .border-indigo-700\/65,
+  .border-[#2b2d31],
+  .border-neutral-700,
+  .border-neutral-800 {
+    border-color: var(--skin-border) !important;
+  }
+
+  /* Make sure rating stars and active visualizer options glow */
+  .text-amber-400\/90, .text-amber-500\/90 {
+    color: var(--skin-accent) !important;
+    filter: drop-shadow(0 0 5px var(--skin-accent-shadow)) !important;
+  }
+
+  /* Custom override for buttons with custom background hover states */
+  .hover\:bg-amber-500:hover, .hover\:text-black:hover {
+    background-color: var(--skin-accent) !important;
+    color: var(--skin-bg) !important;
+  }
+
+  /* Scrubber/Fader thumb overrides */
+  input[type="range"]::-webkit-slider-thumb {
+    background: var(--skin-accent) !important;
+  }
+}
+
+/* BPM Beat Indicator Pulsing Keyframes */
+@keyframes bpm-beat-flash {
+  0%, 100% {
+    transform: scale(0.92);
+    opacity: 0.4;
+  }
+  15% {
+    transform: scale(1.1);
+    opacity: 1;
+    filter: brightness(1.4) drop-shadow(0 0 4px var(--skin-accent, #eedd22));
+  }
+  30% {
+    transform: scale(0.92);
+    opacity: 0.4;
+  }
+}
+
+.bpm-beat-indicator-active {
+  animation: bpm-beat-flash infinite ease-out;
+}
+
+/* --- TITLE MARQUEE SCROLL ANIMATION --- */
+@keyframes title-marquee-scroll {
+  0% {
+    transform: translate3d(0%, 0, 0);
+  }
+  100% {
+    transform: translate3d(-100%, 0, 0);
+  }
+}
+
+.animate-title-marquee-flow {
+  display: inline-block;
+  white-space: nowrap;
+  animation: title-marquee-scroll 12s linear infinite;
+  will-change: transform;
+}
+
+
+/* --- SCREEN APPEARANCE GLOBAL TRANSFORMATION OVERRIDES --- */
+
+/* 1. Green LCD Handheld theme */
+.screen-lcd {
+  --skin-bg: #8ba272 !important;
+  --skin-bg-alt: #7f9566 !important;
+  --skin-panel: #708457 !important;
+  --skin-card: #778b5e !important;
+  --skin-border: #52633e !important;
+  --skin-accent: #111a0b !important;
+  --skin-accent-hover: #1e2c14 !important;
+  --skin-accent-shadow: rgba(26, 35, 17, 0.4) !important;
+  --skin-text: #111a0b !important;
+  --skin-text-muted: #3c4f2d !important;
+  color: #111a0b !important;
+}
+
+/* 2. OLED Neon Theme */
+.screen-oled {
+  --skin-bg: #000000 !important;
+  --skin-bg-alt: #08080a !important;
+  --skin-panel: #000000 !important;
+  --skin-card: #050507 !important;
+  --skin-border: #18181f !important;
+  --skin-accent: #00ffcc !important;
+  --skin-accent-hover: #55ffdd !important;
+  --skin-accent-shadow: rgba(0, 255, 204, 0.35) !important;
+  --skin-text: #ffffff !important;
+  --skin-text-muted: #64748b !important;
+}
+
+/* 3. Paper / E-Ink Monochromatic Theme */
+.screen-e-ink {
+  --skin-bg: #e5e2da !important;
+  --skin-bg-alt: #dcd9cf !important;
+  --skin-panel: #cfcbc1 !important;
+  --skin-card: #e5e2da !important;
+  --skin-border: #928f82 !important;
+  --skin-accent: #1c1c1a !important;
+  --skin-accent-hover: #2e2e2a !important;
+  --skin-accent-shadow: rgba(28, 28, 26, 0.4) !important;
+  --skin-text: #1c1c1a !important;
+  --skin-text-muted: #5e5c53 !important;
+}
+
+/* 4. Synthesizer / Cyberpunk Theme */
+.screen-cyberpunk {
+  --skin-bg: #0d0214 !important;
+  --skin-bg-alt: #160421 !important;
+  --skin-panel: #11031a !important;
+  --skin-card: #180525 !important;
+  --skin-border: #ff0055 !important;
+  --skin-accent: #ff00a0 !important;
+  --skin-accent-hover: #ff55c2 !important;
+  --skin-accent-shadow: rgba(255, 0, 160, 0.35) !important;
+  --skin-text: #ff00a0 !important;
+  --skin-text-muted: #00ff66 !important;
+}
+
+/* Apply appearance overrides globally to all components inside */
+.screen-lcd, .screen-oled, .screen-e-ink, .screen-cyberpunk {
+  #spinamp-bento-skin-main,
+  #spinamp-bento-skin-main-landscape,
+  #spinamp-classic-skin-canvas,
+  #spinamp-classic-skin-canvas-landscape,
+  #active-applet-drawer {
+    background-color: var(--skin-bg) !important;
+    background-image: none !important;
+    color: var(--skin-text) !important;
+    border-color: var(--skin-border) !important;
+  }
+
+  /* Make sure borders match throughout the design */
+  * {
+    border-color: var(--skin-border) !important;
+  }
+
+  svg {
+    stroke: currentColor;
+  }
+
+  #bento-logo-strip,
+  #bento-logo-strip-landscape,
+  #bento-workspace-tabs,
+  #bento-workspace-tabs-landscape,
+  .playlist-header-row,
+  .bento-tab-active {
+    background-color: var(--skin-bg-alt) !important;
+    border-color: var(--skin-border) !important;
+  }
+
+  /* Display Readouts, telemetry and clock indicators */
+  #bento-led-screen,
+  #bento-led-screen-landscape,
+  #classic-display-dashboard,
+  #metadata-display-text,
+  #metadata-display-text-landscape,
+  #clock-readout-deck,
+  #clock-readout-deck-landscape,
+  #classic-clock,
+  #track-telemetry-strip-landscape,
+  #track-telemetry-strip {
+    background-color: var(--skin-panel) !important;
+    border-color: var(--skin-border) !important;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.8) !important;
+  }
+
+  /* All secondary action/display cards and key workspace background boxes, plus the visualizers */
+  #bento-progress-scrubber,
+  #bento-progress-scrubber-landscape,
+  #bento-sound-deck,
+  #bento-sound-deck-landscape,
+  #volume-fader-deck,
+  #volume-fader-deck-landscape,
+  #shuffle-repeat-actions,
+  #shuffle-repeat-actions-landscape,
+  #classic-seek-controller,
+  #classic-sound-controllers,
+  #classic-controls-deck,
+  .eq-slider-deck,
+  #bento-workspace-container,
+  #bento-workspace-container-landscape,
+  #spinamp-media-library,
+  #library-content-area,
+  .playlist-wrapper-box,
+  /* Visualizer Boundary Trigger Panel Boxes from screenshot */
+  #visualizer-boundary-trigger,
+  #visualizer-boundary-trigger-landscape,
+  #classic-visualizer-deck,
+  #classic-visualizer-deck-landscape,
+  /* Playlist scrollable view container, Equalizer panels, folders and details */
+  .flex-1.overflow-y-auto.bg-black,
+  div[class*="playlist-wrapper"] div.bg-black,
+  div[class*="playlist-items-scroller"],
+  div[id*="classic_eq_panel"],
+  div[id*="bento_eq_panel"],
+  div[class*="bg-[#15161a]"],
+  div[class*="bg-[#131416]"],
+  div[class*="bg-[#1c1c20]"],
+  div[class*="bg-[#202125]"] {
+    background-color: var(--skin-card) !important;
+    border-color: var(--skin-border) !important;
+    color: var(--skin-text) !important;
+  }
+
+  /* Target all general buttons, input fields, and select options under the screen themes (Dropdown pickers, Fullscreen & Sleep, Media keys, sort, etc) */
+  button,
+  select,
+  input[type="text"],
+  #bento-workspace-container button,
+  #bento-workspace-container-landscape button {
+    background-color: var(--skin-card) !important;
+    border-color: var(--skin-border) !important;
+    color: var(--skin-text) !important;
+  }
+
+  /* Hover states for interactive buttons */
+  button:hover,
+  select:hover,
+  #bento-workspace-container button:hover,
+  #bento-workspace-container-landscape button:hover,
+  #bento-skin-picker-trigger-landscape:hover,
+  #bento-skin-picker-trigger-portrait:hover {
+    background-color: var(--skin-accent) !important;
+    color: var(--skin-bg) !important;
+    border-color: var(--skin-border) !important;
+  }
+
+  /* Highlight state for active selected buttons, active Sleep buttons, active workspace tabs and list elements */
+  button[class*="text-amber-500"],
+  button[class*="border-amber-500"],
+  button[class*="text-blue-400"],
+  button[class*="border-blue-500/40"],
+  button.bg-amber-500,
+  button[class*="bg-amber-500"],
+  button[class*="border-b-2 border-amber-500"],
+  .bento-tab-active,
+  div[class*="border-t border-[#00ff44]"] {
+    background-color: var(--skin-bg-alt) !important;
+    border-color: var(--skin-accent) !important;
+    color: var(--skin-accent) !important;
+  }
+
+  /* Active track lists and individual selection lists row highlighting */
+  div[class*="bg-neutral-800"],
+  div[class*="bg-zinc-850"],
+  div[class*="bg-neutral-900/60"].border-neutral-700/50,
+  div[class*="hover:bg-neutral-900"]:hover,
+  div[class*="hover:bg-neutral-800"]:hover {
+    background-color: var(--skin-accent) !important;
+    color: var(--skin-bg) !important;
+    border-color: var(--skin-border) !important;
+  }
+
+  /* Ensure selected track text doesn't clash (text is visible) */
+  div[class*="bg-neutral-800"] *,
+  div[class*="bg-zinc-850"] *,
+  button:hover * {
+    color: var(--skin-bg) !important;
+  }
+
+  /* Input fields focusing */
+  input[type="text"]:focus {
+    border-color: var(--skin-accent) !important;
+    box-shadow: 0 0 4px var(--skin-accent-shadow) !important;
+  }
+
+  /* Override interactive active accents and states */
+  .text-amber-500,
+  .text-amber-400,
+  .text-emerald-400,
+  .text-emerald-500,
+  .text-cyan-400,
+  .text-indigo-400,
+  .text-indigo-300 {
+    color: var(--skin-accent) !important;
+  }
+
+  .bg-amber-500,
+  .bg-emerald-500,
+  .bg-indigo-600 {
+    background-color: var(--skin-accent) !important;
+    background-image: none !important;
+    color: var(--skin-bg) !important;
+  }
+
+  .border-amber-500,
+  .border-indigo-700,
+  .border-indigo-700\/65,
+  .border-[#2b2d31],
+  .border-neutral-700 {
+    border-color: var(--skin-border) !important;
+  }
+
+  /* Make sure rating stars and active visualizer options glow */
+  .text-amber-400\/90, .text-amber-500\/90 {
+    color: var(--skin-accent) !important;
+    filter: drop-shadow(0 0 5px var(--skin-accent-shadow)) !important;
+  }
+
+  /* Custom override for buttons with custom background hover states */
+  .hover\:bg-amber-500:hover, .hover\:text-black:hover {
+    background-color: var(--skin-accent) !important;
+    color: var(--skin-bg) !important;
+  }
+
+  /* Scrubber/Fader thumb overrides */
+  input[type="range"]::-webkit-slider-thumb {
+    background: var(--skin-accent) !important;
+  }
+}
+
+/* --- FONT PRESET GLOBAL OVERRIDES --- */
+.font-preset-sans, .font-preset-sans * {
+  font-family: ui-sans-serif, system-ui, sans-serif !important;
+}
+.font-preset-mono, .font-preset-mono * {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace !important;
+}
+.font-preset-serif, .font-preset-serif * {
+  font-family: Georgia, ui-serif, Cambria, "Times New Roman", Times, serif !important;
+}
+.font-preset-display, .font-preset-display * {
+  font-family: "Space Grotesk", sans-serif !important;
+  text-transform: uppercase;
+}
+
+/* --- MARQUEE SCROLL KEYFRAMES --- */
+@keyframes marquee-scroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-100%, 0, 0);
+  }
+}
+
+
+

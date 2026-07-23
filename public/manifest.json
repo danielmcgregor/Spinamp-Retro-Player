@@ -1,0 +1,43 @@
+{
+  "name": "Spinamp Retro Player",
+  "short_name": "Spinamp",
+  "description": "An interactive retro media player featuring bento skins and real-time audio visualizers.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/spinamp_logo.jpg",
+      "sizes": "1024x1024",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": "/?open_file=1",
+      "name": "Audio Track",
+      "icons": [
+        {
+          "src": "/spinamp_logo.jpg",
+          "sizes": "1024x1024",
+          "type": "image/jpeg"
+        }
+      ],
+      "accept": {
+        "audio/*": [
+          ".mp3",
+          ".wav",
+          ".ogg",
+          ".flac",
+          ".m4a",
+          ".aac",
+          ".opus",
+          ".webm"
+        ]
+      }
+    }
+  ]
+}
