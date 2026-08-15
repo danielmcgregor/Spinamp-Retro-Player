@@ -14,7 +14,7 @@ export function drawAurora(
 
   // Calculate average energy in three main bands (Bass, Mid, Treble) with smoothing
   let bassSum = 0, midSum = 0, trebleSum = 0;
-  const bandWidth = Math.floor(bufferLength / 3);
+  const bandWidth = Math.max(1, Math.floor(bufferLength / 3));
   for (let i = 0; i < bandWidth; i++) {
     bassSum += dataArray[i] || 0;
     midSum += dataArray[i + bandWidth] || 0;
@@ -45,6 +45,14 @@ export function drawAurora(
     glowR = 4; glowG = 24; glowB = 24;
   } else if (visTheme === 'mono') {
     glowR = 16; glowG = 16; glowB = 16;
+  } else if (visTheme === 'crimson') {
+    glowR = 32; glowG = 4; glowB = 8;
+  } else if (visTheme === 'custom') {
+    let cAccent = '#ff9100';
+    try { const r = window.getComputedStyle(document.body).getPropertyValue('--skin-accent'); if(r&&r.trim()) cAccent=r.trim(); } catch(e){}
+    const c = cAccent.startsWith('#') ? cAccent.substring(1) : 'ff9100';
+    const rgb = parseInt(c, 16) || 0;
+    glowR = (rgb >> 16) & 255; glowG = (rgb >> 8) & 255; glowB = rgb & 255;
   }
   const maxGlowAlpha = 0.05 + bassEnergy * 0.08;
   ambientGlow.addColorStop(0, `rgba(${glowR}, ${glowG}, ${glowB}, ${maxGlowAlpha})`);
@@ -161,6 +169,23 @@ export function drawAurora(
         grad.addColorStop(0, `rgba(39, 39, 42, ${alphaValue * 0.02})`);
         grad.addColorStop(0.35, `rgba(161, 161, 170, ${alphaValue * 0.9})`);
         grad.addColorStop(0.75, `rgba(244, 244, 245, ${alphaValue * 0.7})`);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+      } else if (visTheme === 'crimson') {
+        grad.addColorStop(0, `rgba(88, 28, 135, ${alphaValue * 0.05})`);
+        grad.addColorStop(0.35, `rgba(225, 29, 72, ${alphaValue * 0.95})`);
+        grad.addColorStop(0.75, `rgba(244, 63, 94, ${alphaValue * 0.7})`);
+        grad.addColorStop(0.95, `rgba(253, 164, 175, ${alphaValue * 0.25})`);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+      } else if (visTheme === 'custom') {
+        let cAccent = '#ff9100';
+        try { const r = window.getComputedStyle(document.body).getPropertyValue('--skin-accent'); if(r&&r.trim()) cAccent=r.trim(); } catch(e){}
+        const c = cAccent.startsWith('#') ? cAccent.substring(1) : 'ff9100';
+        const rgb = parseInt(c, 16) || 0;
+        const rC = (rgb >> 16) & 255; const gC = (rgb >> 8) & 255; const bC = rgb & 255;
+        grad.addColorStop(0, `rgba(${rC}, ${gC}, ${bC}, ${alphaValue * 0.05})`);
+        grad.addColorStop(0.35, `rgba(${rC}, ${gC}, ${bC}, ${alphaValue * 0.95})`);
+        grad.addColorStop(0.75, `rgba(${rC}, ${gC}, ${bC}, ${alphaValue * 0.5})`);
+        grad.addColorStop(0.95, `rgba(255, 255, 255, ${alphaValue * 0.25})`);
         grad.addColorStop(1, 'rgba(0,0,0,0)');
       } else {
         if (c === 0) {

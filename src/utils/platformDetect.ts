@@ -6,6 +6,10 @@ export const isAndroidWebView = (): boolean => {
 
 export const isAndroid = (): boolean => /Android/i.test(navigator?.userAgent ?? '');
 
+export const isIOS = (): boolean => /iPhone|iPad|iPod/i.test(navigator?.userAgent ?? '');
+
+export const isMobile = (): boolean => isAndroid() || isIOS();
+
 export function isAndroidMediaBridgeAvailable(): boolean {
   return typeof window !== 'undefined' && 
          typeof (window as any).AndroidMediaBridge !== 'undefined' &&
@@ -13,14 +17,50 @@ export function isAndroidMediaBridgeAvailable(): boolean {
 }
 
 let nativeAppInForeground = true;
+let visibilityMismatchTimer: ReturnType<typeof setTimeout> | null = null;
+
+function checkVisibilityMismatch() {
+  if (typeof document === 'undefined') return;
+  
+  const docIsVisible = !document.hidden;
+  
+  if (docIsVisible && !nativeAppInForeground) {
+    if (!visibilityMismatchTimer) {
+      visibilityMismatchTimer = setTimeout(() => {
+        if (!document.hidden && !nativeAppInForeground) {
+          console.warn('[Spinamp] nativeAppInForeground and document.hidden have been contradictory for 5 seconds. Self-healing nativeAppInForeground to true to prevent deadlock.');
+          nativeAppInForeground = true;
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('spinamp-visibility-changed', { detail: true }));
+          }
+        }
+        visibilityMismatchTimer = null;
+      }, 5000);
+    }
+  } else {
+    if (visibilityMismatchTimer) {
+      clearTimeout(visibilityMismatchTimer);
+      visibilityMismatchTimer = null;
+    }
+  }
+}
 
 if (typeof window !== 'undefined') {
   (window as any).onNativeAppVisibilityChanged = (isForeground: boolean) => {
     nativeAppInForeground = isForeground;
+    checkVisibilityMismatch();
     window.dispatchEvent(new CustomEvent('spinamp-visibility-changed', { detail: isForeground }));
   };
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', checkVisibilityMismatch);
+  }
+  window.addEventListener('focus', checkVisibilityMismatch);
 }
 
 export function isAppInForeground(): boolean {
+  if (typeof document !== 'undefined' && !document.hidden && !nativeAppInForeground) {
+    checkVisibilityMismatch();
+  }
   return nativeAppInForeground && (typeof document === 'undefined' || !document.hidden);
 }

@@ -13,12 +13,12 @@ export interface Track {
   androidUri?: string; // persisted content:// URI for automatic re-linking after app restart (Android builds only)
 }
 
-export type SkinType = 'bento' | 'classic';
+export type SkinType = 'bento' | 'driving';
 
 export type ScreenAppearance = 'default' | 'lcd' | 'oled' | 'e-ink' | 'cyberpunk' | 'custom';
 export type FontPreset = 'sans' | 'mono' | 'serif' | 'display';
 
-export type VisualizerMode = 'spectrum' | 'radial-spectrum' | 'waveform-river' | 'kaleidoscope' | 'album-wall' | 'oscilloscope' | 'fire' | 'rainbow' | 'matrix-rain' | 'starfield-warp' | 'aurora' | 'falling-stars' | 'vfd' | 'vu-meters' | 'moloko-plus' | 'spinning-cd' | 'turntable' | 'minidisk' | 'cassette' | 'guitar-hero' | 'artwork' | 'vegas-strip' | 'skytree' | 'lava-lamp' | 'synthwave-grid' | 'plasma-globe' | 'random' | 'off';
+export type VisualizerMode = 'spectrum' | 'radial-spectrum' | 'waveform-river' | 'kaleidoscope' | 'album-wall' | 'oscilloscope' | 'fire' | 'rainbow' | 'matrix-rain' | 'starfield-warp' | 'aurora' | 'falling-stars' | 'vfd' | 'vu-meters' | 'moloko-plus' | 'spinning-cd' | 'turntable' | 'minidisk' | 'cassette' | 'guitar-hero' | 'artwork' | 'vegas-strip' | 'skytree' | 'lava-lamp' | 'synthwave-grid' | 'plasma-globe' | 'keygen' | 'demoscene' | 'random' | 'off';
 
 export interface EqPreset {
   name: string;

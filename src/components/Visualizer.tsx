@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { VisualizerMode, Track } from '../types';
 import { spinampAudio } from '../utils/audioContext';
 import { isAppInForeground } from '../utils/platformDetect';
+import { safeGetItem, safeSetItem } from '../utils/safeStorage';
 import { drawMatrixRain } from './visualizers/drawMatrixRain';
 import { drawFire } from './visualizers/drawFire';
 import { drawAurora } from './visualizers/drawAurora';
@@ -11,7 +12,9 @@ import { drawRadialSpectrum } from './visualizers/drawRadialSpectrum';
 import { drawWaveformRiver } from './visualizers/drawWaveformRiver';
 import { drawKaleidoscope } from './visualizers/drawKaleidoscope';
 import { drawAlbumWall } from './visualizers/drawAlbumWall';
-import { pruneImageCache, MAX_CACHED_IMAGES } from './visualizers/imageCacheUtils';
+import { drawKeygen, KeygenState } from './visualizers/drawKeygen';
+import { drawDemoscene, DemosceneState } from './visualizers/drawDemoscene';
+import { pruneImageCache, MAX_CACHED_IMAGES, getOrLoadResizedImage } from './visualizers/imageCacheUtils';
 
 interface VisualizerProps {
   mode: VisualizerMode;
@@ -42,6 +45,8 @@ function visualizerPropsAreEqual(
     prev.visSensitivity === next.visSensitivity &&
     prev.width === next.width &&
     prev.height === next.height &&
+    prev.currentTime === next.currentTime &&
+    prev.duration === next.duration &&
     prev.trackBPM === next.trackBPM &&
     prev.playHistory === next.playHistory &&
     prev.tracks === next.tracks
@@ -66,7 +71,7 @@ export const Visualizer = React.memo<VisualizerProps>(({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const albumWallStateRef = useRef<{ imageCache: Map<string, HTMLImageElement> }>({ 
+  const albumWallStateRef = useRef<{ imageCache: Map<string, HTMLCanvasElement | HTMLImageElement> }>({ 
     imageCache: new Map() 
   });
 
@@ -86,6 +91,7 @@ export const Visualizer = React.memo<VisualizerProps>(({
   }, [playHistory, tracks]);
 
   const animationRef = useRef<number | null>(null);
+  const resizeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentTimeRef = useRef<number>(0);
   const currentTrackRef = useRef<Track | null>(null);
   const recentCoverUrlsRef = useRef<string[]>([]);
@@ -110,6 +116,7 @@ export const Visualizer = React.memo<VisualizerProps>(({
   const auroraParticlesRef = useRef<{ x: number; y: number; speed: number; size: number; alpha: number; angle: number }[]>([]);
   const vuNeedlesRef = useRef<{ leftVal: number; leftVel: number; rightVal: number; rightVel: number } | null>(null);
   const molokoBufferRef = useRef<HTMLCanvasElement | null>(null);
+  const tempFeedbackCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const molokoParticlesRef = useRef<{ x: number; y: number; vx: number; vy: number; radius: number; hue: number; alpha: number; life: number; maxLife: number }[]>([]);
 
   // Guitar Hero simulation refs
@@ -143,6 +150,8 @@ export const Visualizer = React.memo<VisualizerProps>(({
   const lavaLampBlobsRef = useRef<any[]>([]);
   const lavaLampParticlesRef = useRef<any[]>([]);
   const synthwaveGridYRef = useRef<number>(0);
+  const keygenRef = useRef<KeygenState>({ stars: [], copperPhase: 0, scrollX: 0, channelPeaks: [0, 0, 0, 0], channelHold: [0, 0, 0, 0] });
+  const demosceneRef = useRef<DemosceneState>({ angleX: 0, angleY: 0, angleZ: 0, twisterPhase: 0, stars: [] });
 
 
   // Physical media simulation refs for smooth, interruptible, physically-correct speed
@@ -162,11 +171,14 @@ export const Visualizer = React.memo<VisualizerProps>(({
   const rollingEnergyRef = useRef<number>(0.3);
   const recentlyShownModesRef = useRef<VisualizerMode[]>([]);
   const lastTimeRef = useRef<number>(0);
-  const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const imageCacheRef = useRef<Map<string, HTMLCanvasElement | HTMLImageElement>>(new Map());
 
   // Local settings state with optional prop delegation
-  const [localVisTheme, setLocalVisTheme] = useState<string>(() => localStorage.getItem('spinamp_vis_theme') || 'neon');
-  const [localVisSensitivity, setLocalVisSensitivity] = useState<number>(() => parseFloat(localStorage.getItem('spinamp_vis_sensitivity') || '1.2'));
+  const [localVisTheme, setLocalVisTheme] = useState<string>(() => safeGetItem('spinamp_vis_theme') || 'neon');
+  const [localVisSensitivity, setLocalVisSensitivity] = useState<number>(() => {
+    const val = parseFloat(safeGetItem('spinamp_vis_sensitivity') || '1.2');
+    return isNaN(val) ? 1.2 : val;
+  });
   const [showSettings, setShowSettings] = useState(false);
 
   const visTheme = propVisTheme !== undefined ? propVisTheme : localVisTheme;
@@ -174,7 +186,7 @@ export const Visualizer = React.memo<VisualizerProps>(({
 
   // Sync state helper functions
   const handleSetTheme = (theme: string) => {
-    localStorage.setItem('spinamp_vis_theme', theme);
+    safeSetItem('spinamp_vis_theme', theme);
     if (propSetVisTheme) {
       propSetVisTheme(theme);
     } else {
@@ -183,7 +195,7 @@ export const Visualizer = React.memo<VisualizerProps>(({
   };
 
   const handleSetSens = (val: number) => {
-    localStorage.setItem('spinamp_vis_sensitivity', val.toString());
+    safeSetItem('spinamp_vis_sensitivity', val.toString());
     if (propSetVisSensitivity) {
       propSetVisSensitivity(val);
     } else {
@@ -191,8 +203,7 @@ export const Visualizer = React.memo<VisualizerProps>(({
     }
   };
 
-  // Reset arrays of assets if height or width changes to prevent boundary overflow
-  useEffect(() => {
+  const resetParticleRefs = () => {
     starsRef.current = [];
     matrixRef.current = [];
     embersRef.current = [];
@@ -214,6 +225,11 @@ export const Visualizer = React.memo<VisualizerProps>(({
     lavaLampBlobsRef.current = [];
     lavaLampParticlesRef.current = [];
     synthwaveGridYRef.current = 0;
+  };
+
+  // Reset arrays of assets if height or width changes to prevent boundary overflow
+  useEffect(() => {
+    resetParticleRefs();
   }, [customWidth, customHeight, window.devicePixelRatio]);
 
   useEffect(() => {
@@ -276,30 +292,6 @@ export const Visualizer = React.memo<VisualizerProps>(({
 
     // Get live analyzer node
     const analyser = spinampAudio.getAnalyser();
-    if (analyser && !(analyser as any).__isVolumeProxied) {
-      (analyser as any).__isVolumeProxied = true;
-      
-      const origGetByteFrequencyData = analyser.getByteFrequencyData;
-      analyser.getByteFrequencyData = function(this: AnalyserNode, array: Uint8Array) {
-        origGetByteFrequencyData.call(this, array);
-        const volumeSettings = spinampAudio.getVolumeSettings();
-        const effectiveVol = volumeSettings ? volumeSettings.effectiveVolume : 1.0;
-        for (let i = 0; i < array.length; i++) {
-          array[i] = Math.round(array[i] * effectiveVol);
-        }
-      };
-
-      const origGetByteTimeDomainData = analyser.getByteTimeDomainData;
-      analyser.getByteTimeDomainData = function(this: AnalyserNode, array: Uint8Array) {
-        origGetByteTimeDomainData.call(this, array);
-        const volumeSettings = spinampAudio.getVolumeSettings();
-        const effectiveVol = volumeSettings ? volumeSettings.effectiveVolume : 1.0;
-        for (let i = 0; i < array.length; i++) {
-          const val = array[i] - 128;
-          array[i] = Math.max(0, Math.min(255, Math.round(128 + val * effectiveVol)));
-        }
-      };
-    }
     const bufferLength = analyser ? analyser.frequencyBinCount : 128;
     const dataArray = new Uint8Array(bufferLength);
 
@@ -320,15 +312,19 @@ export const Visualizer = React.memo<VisualizerProps>(({
       }
     }
 
-    // Initialize matrix columns lazily
-    const numCols = Math.floor(width / 5);
-    if (matrixRef.current.length === 0) {
-      for (let c = 0; c < numCols; c++) {
-        matrixRef.current.push({
-          y: Math.random() * -height - 10,
-          speed: 0.15 + Math.random() * 0.7,
-          char: String.fromCharCode(33 + Math.floor(Math.random() * 90)),
-        });
+    // Initialize or adjust matrix columns if canvas width changes
+    const numCols = Math.max(1, Math.floor(width / 5));
+    if (matrixRef.current.length !== numCols) {
+      if (matrixRef.current.length < numCols) {
+        while (matrixRef.current.length < numCols) {
+          matrixRef.current.push({
+            y: Math.random() * -height - 10,
+            speed: 0.15 + Math.random() * 0.7,
+            char: String.fromCharCode(33 + Math.floor(Math.random() * 90)),
+          });
+        }
+      } else {
+        matrixRef.current.length = numCols;
       }
     }
 
@@ -342,7 +338,14 @@ export const Visualizer = React.memo<VisualizerProps>(({
       const dpr = window.devicePixelRatio || 1;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // Re-apply DPR every frame
 
+      // Calculate delta time
       const now = performance.now();
+      if (lastFrameTimeRef.current === 0) {
+        lastFrameTimeRef.current = now;
+      }
+      const delta = Math.min(0.1, Math.max(0.001, (now - lastFrameTimeRef.current) / 1000)); // strictly bound
+      lastFrameTimeRef.current = now;
+
       const isIdleMode = ['spinning-cd', 'cassette', 'turntable', 'lava-lamp', 
                           'minidisk', 'plasma-globe'].includes(mode);
 
@@ -374,13 +377,6 @@ export const Visualizer = React.memo<VisualizerProps>(({
         beatPulseRef.current = 0;
       }
 
-      // Calculate delta time
-      if (lastFrameTimeRef.current === 0) {
-        lastFrameTimeRef.current = now;
-      }
-      const delta = Math.min(0.1, (now - lastFrameTimeRef.current) / 1000); // Capped at 100ms to ignore background tabs resume leaps
-      lastFrameTimeRef.current = now;
-
       // Calculate rolling energy for smarter mode selection
       if (analyser && isPlaying) {
         analyser.getByteFrequencyData(dataArray);
@@ -397,35 +393,36 @@ export const Visualizer = React.memo<VisualizerProps>(({
         lastTrackIdRef.current = trackId;
       }
 
-      // Update simulation angles if model is playing
+      // Update simulation angles if model is playing OR if scrubbing
+      // Ensure playbackRate is always valid
+      const playbackRate = spinampAudio && typeof spinampAudio.getPlaybackRate === 'function' ? Math.max(0.01, spinampAudio.getPlaybackRate()) : 1.0;
+      const songProg = durationVal > 0 ? (currentTimeVal / durationVal) : 0.42;
+
       if (isPlaying) {
-        const songProg = durationVal > 0 ? (currentTimeVal / durationVal) : 0.42;
-        const playbackRate = spinampAudio && typeof spinampAudio.getPlaybackRate === 'function' ? spinampAudio.getPlaybackRate() : 1.0;
+        if (isNaN(cdAngleRef.current)) cdAngleRef.current = 0;
+        if (isNaN(turntableAngleRef.current)) turntableAngleRef.current = 0;
+        if (isNaN(minidiscAngleRef.current)) minidiscAngleRef.current = 0;
+        if (isNaN(cassetteLeftAngleRef.current)) cassetteLeftAngleRef.current = 0;
+        if (isNaN(cassetteRightAngleRef.current)) cassetteRightAngleRef.current = 0;
 
         // 1. CD Rotation Angle (CLV - Constant Linear Velocity)
-        // Ranges from 500 RPM (inner tracks) to 200 RPM (outer tracks)
         const cdRpm = 500 - songProg * 300;
         const cdRadPerSec = (cdRpm / 60) * 2 * Math.PI;
         cdAngleRef.current = (cdAngleRef.current + cdRadPerSec * delta * playbackRate) % (Math.PI * 2);
 
         // 2. Turntable Rotation Angle (Constant Angular Velocity)
-        // 33⅓ RPM exactly
         const ttRpm = 33.3333;
         const ttRadPerSec = (ttRpm / 60) * 2 * Math.PI;
         turntableAngleRef.current = (turntableAngleRef.current + ttRadPerSec * delta * playbackRate) % (Math.PI * 2);
 
         // 3. MiniDisc Rotation Angle (CLV)
-        // Ranges from 900 RPM (inner tracks) to 400 RPM (outer tracks)
         const mdRpm = 900 - songProg * 500;
         const mdRadPerSec = (mdRpm / 60) * 2 * Math.PI;
         minidiscAngleRef.current = (minidiscAngleRef.current + mdRadPerSec * delta * playbackRate) % (Math.PI * 2);
 
         // 4. Compact Cassette Tape sprockets and dynamic pack rotation
-        // Feed (left) pack and take-up (right) pack. Hub radius = 11mm, Full wound radius = 25mm.
         const rLeft = Math.sqrt(11 * 11 + (1 - songProg) * (25 * 25 - 11 * 11));
         const rRight = Math.sqrt(11 * 11 + songProg * (25 * 25 - 11 * 11));
-        // Linear tape speed: 4.76 cm/s = 47.6 mm/s.
-        // Scale line speed by a factor of 0.8 for smooth realistic motion in canvas space.
         const scaleVel = 47.6 * 0.8;
         const omegaLeft = scaleVel / rLeft;
         const omegaRight = scaleVel / rRight;
@@ -1894,9 +1891,14 @@ export const Visualizer = React.memo<VisualizerProps>(({
           if (oCtx) {
             const time = Date.now() * 0.001;
 
-            const tempFeedbackCanvas = document.createElement('canvas');
-            tempFeedbackCanvas.width = width;
-            tempFeedbackCanvas.height = height;
+            if (!tempFeedbackCanvasRef.current) {
+              tempFeedbackCanvasRef.current = document.createElement('canvas');
+            }
+            const tempFeedbackCanvas = tempFeedbackCanvasRef.current;
+            if (tempFeedbackCanvas.width !== width || tempFeedbackCanvas.height !== height) {
+              tempFeedbackCanvas.width = width;
+              tempFeedbackCanvas.height = height;
+            }
             const tempCtx = tempFeedbackCanvas.getContext('2d');
             if (tempCtx) {
               tempCtx.drawImage(oCanvas, 0, 0);
@@ -2567,7 +2569,7 @@ export const Visualizer = React.memo<VisualizerProps>(({
           const betaAngle = Math.acos(Math.max(-1, Math.min(1, cosBeta)));
 
           // Real, non-stretching pivoted tone-arm angle
-          const armAngle = phiArmSpindle + betaAngle;
+          const armAngle = phiArmSpindle - betaAngle;
           
           // Realistic minor high-frequency rigid-body vibration
           const armWobble = isPlaying ? (Math.sin(Date.now() * 0.1) * (bass * 0.003)) : 0;
@@ -3501,18 +3503,11 @@ export const Visualizer = React.memo<VisualizerProps>(({
 
           // Try get an image from the imageCache
           let hasImage = false;
-          let imgObj: HTMLImageElement | null = null;
+          let imgObj: HTMLCanvasElement | HTMLImageElement | null = null;
           
           if (track.coverUrl) {
-            let cached = imageCacheRef.current.get(track.coverUrl);
-            if (!cached) {
-              cached = new Image();
-              cached.crossOrigin = 'anonymous';
-              cached.src = track.coverUrl;
-              imageCacheRef.current.set(track.coverUrl, cached);
-              pruneImageCache(imageCacheRef.current, MAX_CACHED_IMAGES);
-            }
-            if (cached.complete && cached.naturalWidth > 0) {
+            const cached = getOrLoadResizedImage(track.coverUrl, imageCacheRef.current, 512);
+            if (cached) {
               hasImage = true;
               imgObj = cached;
             }
@@ -3728,16 +3723,16 @@ export const Visualizer = React.memo<VisualizerProps>(({
             
             if (isFullS) {
               ctx.font = 'bold 9px "Inter", sans-serif';
-              ctx.fillText(track.title.toUpperCase(), cx, cardY + 11);
+              ctx.fillText((track.title || 'Unknown').toUpperCase(), cx, cardY + 11);
               ctx.font = '500 7px "Space Grotesk", sans-serif';
               ctx.fillStyle = visTheme === 'cyberpunk' ? '#f472b6' : visTheme === 'amber' ? '#f59e0b' : visTheme === 'mono' ? '#cccccc' : '#34d399';
-              ctx.fillText(`${track.artist.toUpperCase()}  •  ${(track.album || 'SPINAMP').toUpperCase()}`, cx, cardY + 22);
+              ctx.fillText(`${(track.artist || 'Unknown').toUpperCase()}  •  ${(track.album || 'SPINAMP').toUpperCase()}`, cx, cardY + 22);
             } else {
               ctx.font = 'bold 5.5px "Inter", sans-serif';
-              ctx.fillText(track.title, cx, cardY + 6.5);
+              ctx.fillText(track.title || 'Unknown', cx, cardY + 6.5);
               ctx.font = '500 4px "Space Grotesk", sans-serif';
               ctx.fillStyle = visTheme === 'cyberpunk' ? '#f472b6' : visTheme === 'amber' ? '#f59e0b' : visTheme === 'mono' ? '#999999' : '#10b981';
-              ctx.fillText(`${track.artist}`, cx, cardY + 12.5);
+              ctx.fillText(`${track.artist || 'Unknown'}`, cx, cardY + 12.5);
             }
           }
           ctx.restore();
@@ -5115,23 +5110,30 @@ export const Visualizer = React.memo<VisualizerProps>(({
           ctx.arc(cx, cy, sphereR - 5, Math.PI * 0.1, Math.PI * 0.4);
           ctx.stroke();
           ctx.restore();
+        } else if (targetMode === 'keygen') {
+          analyser.getByteFrequencyData(dataArray);
+          drawKeygen(ctx, canvas, dataArray, visTheme, visSensitivity, keygenRef, width, height, beatPulseRef.current);
+        } else if (targetMode === 'demoscene') {
+          analyser.getByteFrequencyData(dataArray);
+          drawDemoscene(ctx, canvas, dataArray, visTheme, visSensitivity, demosceneRef, width, height, beatPulseRef.current);
         }
       };
 
       if (analyser) {
         if (mode === 'random') {
           const now = performance.now();
-          if (lastTimeRef.current === 0) {
+          if (lastTimeRef.current === 0 || now - lastTimeRef.current > 1000) {
             lastTimeRef.current = now;
           }
-          const delta = now - lastTimeRef.current;
+          const rawDelta = now - lastTimeRef.current;
+          const delta = Math.min(100, Math.max(0, rawDelta));
           lastTimeRef.current = now;
 
           randomTimerRef.current += delta;
 
-          const stayDuration = 6000; // stay on a mode for 6 seconds
-          const morphDuration = 2000; // morph for 2 seconds
-          const totalDuration = stayDuration + morphDuration;
+          const displayDuration = 7500; // Stay on a mode for 7.5 seconds
+          const transitionDuration = 300; // Brief 300ms smooth fade transition
+          const totalDuration = displayDuration + transitionDuration;
 
           const CALM_MODES: VisualizerMode[] = [
             'aurora', 'lava-lamp', 'starfield-warp', 'plasma-globe', 'moloko-plus', 
@@ -5139,7 +5141,7 @@ export const Visualizer = React.memo<VisualizerProps>(({
           ];
           const ENERGETIC_MODES: VisualizerMode[] = [
             'fire', 'matrix-rain', 'vegas-strip', 'guitar-hero', 'synthwave-grid', 
-            'kaleidoscope', 'radial-spectrum'
+            'kaleidoscope', 'radial-spectrum', 'keygen', 'demoscene'
           ];
           const NEUTRAL_MODES: VisualizerMode[] = [
             'spectrum', 'oscilloscope', 'vfd', 'vu-meters', 'spinning-cd', 
@@ -5157,6 +5159,7 @@ export const Visualizer = React.memo<VisualizerProps>(({
           if (randomTimerRef.current >= totalDuration) {
             randomTimerRef.current = 0;
             currentRandomModeRef.current = nextRandomModeRef.current;
+            resetParticleRefs();
             
             recentlyShownModesRef.current.push(currentRandomModeRef.current);
             const RECENT_HISTORY_SIZE = 5;
@@ -5185,15 +5188,17 @@ export const Visualizer = React.memo<VisualizerProps>(({
             nextRandomModeRef.current = finalPool[Math.floor(Math.random() * finalPool.length)] || 'spectrum';
           }
 
-          if (randomTimerRef.current < stayDuration) {
-            drawSpecificMode(currentRandomModeRef.current);
-          } else {
-            const progress = (randomTimerRef.current - stayDuration) / morphDuration;
-            drawSpecificMode(currentRandomModeRef.current);
+          // Render strictly single visualizer per frame for 60fps performance
+          drawSpecificMode(currentRandomModeRef.current);
 
+          if (randomTimerRef.current >= displayDuration) {
+            // Subtle transition dip without double-drawing two visualizers
+            const fadeProgress = (randomTimerRef.current - displayDuration) / transitionDuration;
+            const fadeAlpha = Math.sin(fadeProgress * Math.PI) * 0.65;
+            
             ctx.save();
-            ctx.globalAlpha = Math.min(1.0, Math.max(0.0, progress));
-            drawSpecificMode(nextRandomModeRef.current);
+            ctx.fillStyle = `rgba(0, 0, 0, ${fadeAlpha.toFixed(2)})`;
+            ctx.fillRect(0, 0, width, height);
             ctx.restore();
           }
         } else {
@@ -5233,6 +5238,12 @@ export const Visualizer = React.memo<VisualizerProps>(({
     };
 
     const observer = new ResizeObserver(() => {
+      // Cancel any pending resize timeout
+      if (resizeTimeoutRef.current !== null) {
+        clearTimeout(resizeTimeoutRef.current);
+        resizeTimeoutRef.current = null;
+      }
+
       // Cancel the stale frame (sized for the old dimensions)...
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
@@ -5244,7 +5255,8 @@ export const Visualizer = React.memo<VisualizerProps>(({
       // settled at its new size. A short delay avoids restarting mid-resize 
       // while the browser is still reporting intermediate/transitional 
       // dimensions during the rotation animation.
-      setTimeout(() => {
+      resizeTimeoutRef.current = setTimeout(() => {
+        resizeTimeoutRef.current = null;
         if (animationRef.current === null) {
           animationRef.current = requestAnimationFrame(render);
         }
@@ -5271,6 +5283,10 @@ export const Visualizer = React.memo<VisualizerProps>(({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('spinamp-visibility-changed', handleVisibilityChange);
       observer.disconnect();
+      if (resizeTimeoutRef.current !== null) {
+        clearTimeout(resizeTimeoutRef.current);
+        resizeTimeoutRef.current = null;
+      }
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }

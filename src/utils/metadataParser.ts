@@ -31,6 +31,7 @@ const isFlac = (view: DataView): boolean => {
 
 // Parse synchsafe size from ID3v2 header
 const getSynchsafeSize = (data: DataView, offset: number): number => {
+  if (offset + 4 > data.byteLength) return 0;
   const b1 = data.getUint8(offset);
   const b2 = data.getUint8(offset + 1);
   const b3 = data.getUint8(offset + 2);
@@ -40,12 +41,13 @@ const getSynchsafeSize = (data: DataView, offset: number): number => {
 
 // Parse 32-bit big endian integer
 const getUint32Size = (data: DataView, offset: number): number => {
+  if (offset + 4 > data.byteLength) return 0;
   return data.getUint32(offset, false);
 };
 
 // Decode encoded text frame
 const decodeString = (buffer: ArrayBuffer, offset: number, length: number, encoding: number): string => {
-  if (length <= 0) return "";
+  if (length <= 0 || offset < 0 || offset + length > buffer.byteLength) return "";
   const view = new Uint8Array(buffer, offset, length);
   
   // Trim trailing nulls
@@ -323,20 +325,28 @@ export const parseFLAC = (buffer: ArrayBuffer): { title?: string; artist?: strin
 // Sensing audio file duration via a temporary Audio element
 const getAudioDuration = (file: File): Promise<number> => {
   return new Promise((resolve) => {
-    const audio = new Audio();
-    const objectUrl = URL.createObjectURL(file);
-    audio.src = objectUrl;
-    
+    let audio: HTMLAudioElement | null = null;
+    let objectUrl: string | null = null;
+    let isCleanedUp = false;
+
     const cleanup = () => {
-      audio.removeEventListener('loadedmetadata', onLoaded);
-      audio.removeEventListener('error', onError);
-      URL.revokeObjectURL(objectUrl);
+      if (isCleanedUp) return;
+      isCleanedUp = true;
+      if (audio) {
+        audio.removeEventListener('loadedmetadata', onLoaded);
+        audio.removeEventListener('error', onError);
+        audio.src = '';
+      }
+      if (objectUrl) {
+        try { URL.revokeObjectURL(objectUrl); } catch (_) {}
+        objectUrl = null;
+      }
     };
 
     const onLoaded = () => {
-      const duration = audio.duration;
+      const duration = audio ? audio.duration : 180;
       cleanup();
-      resolve(isNaN(duration) || !isFinite(duration) ? 180 : duration);
+      resolve(isNaN(duration) || !isFinite(duration) || duration <= 0 ? 180 : duration);
     };
 
     const onError = () => {
@@ -344,26 +354,44 @@ const getAudioDuration = (file: File): Promise<number> => {
       resolve(180); // Default fallback of 3 mins
     };
 
-    audio.addEventListener('loadedmetadata', onLoaded);
-    audio.addEventListener('error', onError);
-    
-    // Safe timeout to prevent hanging
-    const timeoutDuration = isAndroid() ? 2000 : 5000;
-    setTimeout(() => {
+    try {
+      if (!file || typeof file.slice !== 'function') {
+        resolve(180);
+        return;
+      }
+      audio = new Audio();
+      objectUrl = URL.createObjectURL(file);
+      audio.addEventListener('loadedmetadata', onLoaded);
+      audio.addEventListener('error', onError);
+      audio.src = objectUrl;
+
+      // Safe timeout to prevent hanging
+      const timeoutDuration = isAndroid() ? 2000 : 5000;
+      setTimeout(() => {
+        cleanup();
+        resolve(180);
+      }, timeoutDuration);
+    } catch (_) {
       cleanup();
       resolve(180);
-    }, timeoutDuration);
+    }
   });
 };
 
 // Main exporter
 export const readAudioMetadata = async (file: File): Promise<AudioMetadata> => {
-  // 1. Resolve duration first asynchronously (in parallel or sequentially)
-  const durationPromise = getAudioDuration(file);
-  
-  // Default values based on filename matching (graceful fallback)
-  const nameWithoutExtension = (file.name || "Unknown Track").replace(/\.[^/.]+$/, "");
-  let cleanTitle = nameWithoutExtension;
+  if (!file || typeof file !== 'object') {
+    return {
+      title: "Unknown Track",
+      artist: "Local Singer",
+      album: "Local Folder Upload",
+      duration: 180,
+    };
+  }
+
+  const fileName = file.name || "Unknown Track";
+  const nameWithoutExtension = fileName.replace(/\.[^/.]+$/, "");
+  let cleanTitle = nameWithoutExtension || "Untitled";
   let cleanArtist = "Local Singer";
   let cleanAlbum = "Local Folder Upload";
 
@@ -390,49 +418,53 @@ export const readAudioMetadata = async (file: File): Promise<AudioMetadata> => {
     }
   }
 
+  let duration = 180;
   let tags: { title?: string; artist?: string; album?: string; coverUrl?: string } = {};
 
   try {
-    // Read the start of the file first to detect header signature
-    const headerReader = new FileReader();
-    const firstBytes = await new Promise<ArrayBuffer>((resolve, reject) => {
-      headerReader.onload = () => resolve(headerReader.result as ArrayBuffer);
-      headerReader.onerror = () => reject(headerReader.error);
-      headerReader.readAsArrayBuffer(file.slice(0, 10));
-    });
-    
-    const headerView = new DataView(firstBytes);
-    
-    if (isID3(headerView)) {
-      // It's an MP3 with ID3v2 tags. Read the full tag size.
-      const tagSize = getSynchsafeSize(headerView, 6);
-      const safeSize = Math.min(tagSize + 10, Math.min(file.size, 10 * 1024 * 1024)); // clamp to max 10MB to be safe
-      
-      const tagReader = new FileReader();
-      const tagBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-        tagReader.onload = () => resolve(tagReader.result as ArrayBuffer);
-        tagReader.onerror = () => reject(tagReader.error);
-        tagReader.readAsArrayBuffer(file.slice(0, safeSize));
+    duration = await getAudioDuration(file);
+
+    if (typeof file.slice === 'function') {
+      const headerReader = new FileReader();
+      const firstBytes = await new Promise<ArrayBuffer>((resolve, reject) => {
+        headerReader.onload = () => resolve(headerReader.result as ArrayBuffer);
+        headerReader.onerror = () => reject(headerReader.error || new Error("Failed to read header"));
+        headerReader.readAsArrayBuffer(file.slice(0, 10));
       });
       
-      tags = parseID3(tagBuffer);
-    } else if (isFlac(headerView)) {
-      // It's a FLAC file. Read the first 4MB which normally holds headers.
-      const flacHeaderSize = Math.min(file.size, 4 * 1024 * 1024);
-      const tagReader = new FileReader();
-      const flacBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-        tagReader.onload = () => resolve(tagReader.result as ArrayBuffer);
-        tagReader.onerror = () => reject(tagReader.error);
-        tagReader.readAsArrayBuffer(file.slice(0, flacHeaderSize));
-      });
-      
-      tags = parseFLAC(flacBuffer);
+      if (firstBytes && firstBytes.byteLength >= 4) {
+        const headerView = new DataView(firstBytes);
+        
+        if (isID3(headerView)) {
+          const tagSize = getSynchsafeSize(headerView, 6);
+          const fileSize = typeof file.size === 'number' ? file.size : 10 * 1024 * 1024;
+          const safeSize = Math.min(tagSize + 10, Math.min(fileSize, 10 * 1024 * 1024));
+          
+          const tagReader = new FileReader();
+          const tagBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+            tagReader.onload = () => resolve(tagReader.result as ArrayBuffer);
+            tagReader.onerror = () => reject(tagReader.error || new Error("Failed to read ID3 tag"));
+            tagReader.readAsArrayBuffer(file.slice(0, safeSize));
+          });
+          
+          tags = parseID3(tagBuffer);
+        } else if (isFlac(headerView)) {
+          const fileSize = typeof file.size === 'number' ? file.size : 4 * 1024 * 1024;
+          const flacHeaderSize = Math.min(fileSize, 4 * 1024 * 1024);
+          const tagReader = new FileReader();
+          const flacBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+            tagReader.onload = () => resolve(tagReader.result as ArrayBuffer);
+            tagReader.onerror = () => reject(tagReader.error || new Error("Failed to read FLAC tag"));
+            tagReader.readAsArrayBuffer(file.slice(0, flacHeaderSize));
+          });
+          
+          tags = parseFLAC(flacBuffer);
+        }
+      }
     }
   } catch (e) {
-    console.error("Failed parsing metadata for file " + file.name, e);
+    console.warn("Failed parsing metadata for file " + fileName, e);
   }
-
-  const duration = await durationPromise;
 
   return {
     title: tags.title?.trim() || cleanTitle,

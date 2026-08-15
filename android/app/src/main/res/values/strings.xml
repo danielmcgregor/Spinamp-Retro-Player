@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Spinamp Retro Player</string>
+    <string name="title_activity_main">Spinamp Retro Player</string>
+    <string name="package_name">com.spinamp.retroplayer</string>
+    <string name="custom_url_scheme">com.spinamp.retroplayer</string>
+</resources>

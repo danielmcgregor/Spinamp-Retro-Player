@@ -1,6 +1,7 @@
 import { Track, PlayerState } from '../types';
 import { synthService } from './synth';
 import { isAndroidMediaBridgeAvailable } from './platformDetect';
+import { safeGetItem, safeSetItem } from './safeStorage';
 import { 
   isAndroidVolumeBridgeAvailable, 
   getNativeSystemVolume, 
@@ -16,7 +17,12 @@ class SpinampAudioEngine {
   private analyserNode: AnalyserNode | null = null;
   private preampGainNode: GainNode | null = null;
   private filterNodes: BiquadFilterNode[] = [];
+  private bassBoostNode: BiquadFilterNode | null = null;
   private volumeGainNode: GainNode | null = null;
+
+  // Effects & Speed
+  private userPlaybackRate: number = typeof window !== 'undefined' ? parseFloat(safeGetItem('spinamp_playback_rate') || '1.0') : 1.0;
+  private bassBoostDb: number = typeof window !== 'undefined' ? parseFloat(safeGetItem('spinamp_bass_boost') || '0') : 0;
 
   // Track sources
   private currentTrack: Track | null = null;
@@ -25,6 +31,7 @@ class SpinampAudioEngine {
   private lastSetFile: File | null = null;
 
   private expectedPauseRef: boolean = false;
+  private wakeLockSentinel: any = null;
   private consecutivePlayFailures: number = 0;
   private lastPlayFailureTrackId: string | null = null;
 
@@ -40,10 +47,10 @@ class SpinampAudioEngine {
     isPlaying: false,
     currentTime: 0,
     duration: 0,
-    volume: typeof window !== 'undefined' ? parseFloat(localStorage.getItem('spinamp_player_volume') || '0.3') : 0.3,
-    isMuted: typeof window !== 'undefined' ? localStorage.getItem('spinamp_player_is_muted') === 'true' : false,
-    shuffle: typeof window !== 'undefined' ? localStorage.getItem('spinamp_player_shuffle') === 'true' : false,
-    repeat: typeof window !== 'undefined' ? (localStorage.getItem('spinamp_player_repeat') as 'none' | 'all' | 'one') || 'none' : 'none',
+    volume: typeof window !== 'undefined' ? parseFloat(safeGetItem('spinamp_player_volume') || '0.3') : 0.3,
+    isMuted: typeof window !== 'undefined' ? safeGetItem('spinamp_player_is_muted') === 'true' : false,
+    shuffle: typeof window !== 'undefined' ? safeGetItem('spinamp_player_shuffle') === 'true' : false,
+    repeat: typeof window !== 'undefined' ? (safeGetItem('spinamp_player_repeat') as 'none' | 'all' | 'one') || 'none' : 'none',
   };
   
   private lastBroadcastedTime: number = -1;
@@ -113,12 +120,14 @@ class SpinampAudioEngine {
             0.02
           );
         }
-        localStorage.setItem('spinamp_player_volume', this.playerState.volume.toString());
+        safeSetItem('spinamp_player_volume', this.playerState.volume.toString());
         this.broadcastState(); // so the in-app slider UI updates to match
       });
 
       this.audioElement = new Audio();
       this.audioElement.crossOrigin = 'anonymous';
+      (this.audioElement as any).playsInline = true;
+      (this.audioElement as any).webkitPlaysInline = true;
 
       // Attach audio element event listeners
       this.audioElement.addEventListener('play', () => this.onPlayStateChange(true));
@@ -131,10 +140,40 @@ class SpinampAudioEngine {
             'app foreground:', (window as any).AndroidMediaBridge ? 'native bridge present' : 'no bridge',
             'document.hidden:', document.hidden
           );
+          // Auto-resume if interrupted by screen-off or transient OS focus loss
+          if (this.playerState.isPlaying && this.audioElement && !this.audioElement.error) {
+            this.audioElement.play().catch((err) => {
+              console.warn('Auto-resume after unexpected pause pending visibility change:', err);
+            });
+            return; // Maintain isPlaying state so it auto-resumes when screen lights back up
+          }
         }
         this.onPlayStateChange(false);
       });
       this.audioElement.addEventListener('ended', () => this.onTrackEnded());
+      this.audioElement.addEventListener('error', (e) => {
+        const err = this.audioElement?.error;
+        console.warn('[Spinamp] Audio element media load error:', err?.code, err?.message, e);
+        this.stopTrackingTime();
+        this.playerState.isPlaying = false;
+        this.broadcastState();
+      });
+
+      // Global visibility / pageshow / focus listener to ensure playback survives screen dark / sleep
+      const handleBackgroundResume = () => {
+        if (this.playerState.isPlaying) {
+          this.ensureContext();
+          this.requestWakeLock();
+          if (this.audioElement && this.audioElement.paused && !this.expectedPauseRef) {
+            this.audioElement.play().catch(() => {});
+          }
+        }
+      };
+
+      window.addEventListener('visibilitychange', handleBackgroundResume);
+      window.addEventListener('pageshow', handleBackgroundResume);
+      window.addEventListener('focus', handleBackgroundResume);
+      window.addEventListener('spinamp-visibility-changed', handleBackgroundResume);
       
       const handleDurationChange = () => {
         if (this.audioElement && !this.isSynthPlaying) {
@@ -183,6 +222,11 @@ class SpinampAudioEngine {
         return;
       }
       this.audioCtx = new AudioContextClass();
+      this.audioCtx.onstatechange = () => {
+        if (this.audioCtx?.state === 'suspended' && this.playerState.isPlaying) {
+          this.audioCtx.resume().catch(() => {});
+        }
+      };
     } catch (e) {
       console.warn("Failed to construct AudioContext:", e);
       this.audioCtx = null;
@@ -238,20 +282,31 @@ class SpinampAudioEngine {
       this.volumeGainNode = this.audioCtx.createGain();
       this.volumeGainNode.gain.value = this.playerState.volume;
 
+      // Create Bass Boost low shelf filter
+      this.bassBoostNode = this.audioCtx.createBiquadFilter();
+      this.bassBoostNode.type = 'lowshelf';
+      this.bassBoostNode.frequency.value = 80; // Punchy sub-bass cutoff
+      this.bassBoostNode.gain.value = this.bassBoostDb;
+
       // Connect standard audio element
-      if (this.audioElement) {
-        this.sourceNode = this.audioCtx.createMediaElementSource(this.audioElement);
-        this.sourceNode.connect(this.preampGainNode);
+      if (this.audioElement && !this.sourceNode) {
+        try {
+          this.sourceNode = this.audioCtx.createMediaElementSource(this.audioElement);
+          this.sourceNode.connect(this.preampGainNode);
+        } catch (err) {
+          console.warn("MediaElementAudioSourceNode creation skipped or already attached:", err);
+        }
       }
 
-      // Direct connect filters in series: Preamp -> Filter0 -> Filter1 -> ... -> Filter9 -> Gain -> Analyser -> Destination
+      // Direct connect filters in series: Preamp -> Filter0..9 -> BassBoost -> Gain -> Analyser -> Destination
       let lastNode: AudioNode = this.preampGainNode;
       this.filterNodes.forEach((filter) => {
         lastNode.connect(filter);
         lastNode = filter;
       });
 
-      lastNode.connect(this.volumeGainNode);
+      lastNode.connect(this.bassBoostNode);
+      this.bassBoostNode.connect(this.volumeGainNode);
       this.volumeGainNode.connect(this.analyserNode);
       this.analyserNode.connect(this.audioCtx.destination);
 
@@ -315,12 +370,41 @@ class SpinampAudioEngine {
     this.updateMediaSession();
   }
 
+  private async requestWakeLock() {
+    if (typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
+      try {
+        if (!this.wakeLockSentinel && this.playerState.isPlaying) {
+          this.wakeLockSentinel = await (navigator as any).wakeLock.request('screen');
+          this.wakeLockSentinel.addEventListener('release', () => {
+            this.wakeLockSentinel = null;
+            if (this.playerState.isPlaying && typeof document !== 'undefined' && document.visibilityState === 'visible') {
+              setTimeout(() => this.requestWakeLock(), 500);
+            }
+          });
+        }
+      } catch {
+        // Battery saver or background tab might reject wake lock request
+      }
+    }
+  }
+
+  private releaseWakeLock() {
+    if (this.wakeLockSentinel) {
+      try {
+        this.wakeLockSentinel.release();
+      } catch {}
+      this.wakeLockSentinel = null;
+    }
+  }
+
   private onPlayStateChange(isPlaying: boolean) {
     this.playerState.isPlaying = isPlaying;
     if (isPlaying) {
       this.startTrackingTime();
+      this.requestWakeLock();
     } else {
       this.stopTrackingTime();
+      this.releaseWakeLock();
     }
     this.broadcastState();
   }
@@ -367,7 +451,8 @@ class SpinampAudioEngine {
 
   private ensureContext() {
     try {
-      if (!this.audioCtx) {
+      if (!this.audioCtx || this.audioCtx.state === 'closed') {
+        this.audioCtx = null;
         this.initAudioContext();
       }
       if (this.audioCtx && this.audioCtx.state === 'suspended') {
@@ -394,12 +479,16 @@ class SpinampAudioEngine {
       return;
     }
 
+    this.expectedPauseRef = true;
     this.stop();
 
-    // Revoke previous file URL to prevent memory leak
+    // Defer previous file URL revocation to prevent aborting active audio decoders
     if (this.currentFileUrl) {
-      URL.revokeObjectURL(this.currentFileUrl);
+      const oldUrl = this.currentFileUrl;
       this.currentFileUrl = null;
+      setTimeout(() => {
+        try { URL.revokeObjectURL(oldUrl); } catch (_) {}
+      }, 1500);
     }
 
     this.lastSetFile = track.file || null;
@@ -411,11 +500,15 @@ class SpinampAudioEngine {
       this.playerState.currentTime = 0;
       this.playerState.duration = 600; // Simulated 10 mins synth jam
       this.broadcastState();
-    } else if (track.file) {
-      this.currentFileUrl = URL.createObjectURL(track.file);
-      if (this.audioElement) {
-        this.audioElement.src = this.currentFileUrl;
-        this.audioElement.load();
+    } else if (track.file && ((track.file as any) instanceof File || (track.file as any) instanceof Blob)) {
+      try {
+        this.currentFileUrl = URL.createObjectURL(track.file);
+        if (this.audioElement) {
+          this.audioElement.src = this.currentFileUrl;
+          this.audioElement.load();
+        }
+      } catch (err) {
+        console.error('Failed to create Object URL for track file:', err);
       }
     } else if (track.url) {
       if (this.audioElement) {
@@ -423,6 +516,11 @@ class SpinampAudioEngine {
         this.audioElement.load();
       }
     }
+    
+    setTimeout(() => {
+      this.expectedPauseRef = false;
+    }, 150);
+
     this.updateMediaSessionMetadata(track);
     this.updateMediaSession(); // ensure native bridge gets the initial state immediately
   }
@@ -446,12 +544,37 @@ class SpinampAudioEngine {
     }
   }
 
+  public setUserPlaybackRate(rate: number) {
+    const clamped = Math.max(0.25, Math.min(3.0, rate));
+    this.userPlaybackRate = clamped;
+    safeSetItem('spinamp_playback_rate', clamped.toString());
+    this.setPlaybackRateSafe(clamped);
+    this.updateMediaSession();
+  }
+
+  public getUserPlaybackRate(): number {
+    return this.userPlaybackRate;
+  }
+
+  public setBassBoost(db: number) {
+    const clamped = Math.max(0, Math.min(12, db));
+    this.bassBoostDb = clamped;
+    safeSetItem('spinamp_bass_boost', clamped.toString());
+    if (this.bassBoostNode && this.audioCtx) {
+      this.bassBoostNode.gain.setTargetAtTime(clamped, this.audioCtx.currentTime, 0.015);
+    }
+  }
+
+  public getBassBoost(): number {
+    return this.bassBoostDb;
+  }
+
   public getPlaybackRate(): number {
     if (this.isSynthPlaying) return 1.0;
     if (this.audioElement) {
       return this.audioElement.playbackRate;
     }
-    return 1.0;
+    return this.userPlaybackRate;
   }
 
   public getVolumeSettings() {
@@ -462,15 +585,16 @@ class SpinampAudioEngine {
     };
   }
 
-  public play() {
+  public play(): Promise<void> {
     this.ensureContext();
-    if (!this.currentTrack) return;
+    if (!this.currentTrack) return Promise.resolve();
 
     if (this.isSynthPlaying) {
       synthService.start();
       this.playerState.isPlaying = true;
       this.startTrackingTime();
       this.broadcastState();
+      return Promise.resolve();
     } else if (this.audioElement) {
       const isEasterEggMode = this.visMode === 'cassette' || this.visMode === 'turntable';
       if (!isEasterEggMode) {
@@ -479,7 +603,7 @@ class SpinampAudioEngine {
           clearInterval(this.spinTimer);
           this.spinTimer = null;
         }
-        this.setPlaybackRateSafe(1.0);
+        this.setPlaybackRateSafe(this.userPlaybackRate);
         if (this.volumeGainNode && this.audioCtx) {
           this.volumeGainNode.gain.setTargetAtTime(
             this.playerState.isMuted ? 0 : this.playerState.volume,
@@ -487,24 +611,26 @@ class SpinampAudioEngine {
             0.02
           );
         }
-        this.audioElement.play().then(() => {
-          this.consecutivePlayFailures = 0;
-        }).catch((err) => {
-          console.warn('Playback failed, need user interaction first: ', err);
-          if (this.lastPlayFailureTrackId === this.currentTrack?.id) {
-            this.consecutivePlayFailures++;
-          } else {
-            this.consecutivePlayFailures = 1;
-            this.lastPlayFailureTrackId = this.currentTrack?.id || null;
-          }
-          if (this.consecutivePlayFailures >= 3) {
-            console.error('[Spinamp] Playback failed 3 times in a row for the same track — stopping automatic retries.');
+        try {
+          return this.audioElement.play().then(() => {
+            this.consecutivePlayFailures = 0;
+          }).catch((err) => {
+            console.warn('Playback failed, need user interaction first: ', err);
+            if (this.lastPlayFailureTrackId === this.currentTrack?.id) {
+              this.consecutivePlayFailures++;
+            } else {
+              this.consecutivePlayFailures = 1;
+              this.lastPlayFailureTrackId = this.currentTrack?.id || null;
+            }
             this.playerState.isPlaying = false;
             this.broadcastState();
-            return;
-          }
-        });
-        return;
+          });
+        } catch (err) {
+          console.warn('Synchronous play call failed:', err);
+          this.playerState.isPlaying = false;
+          this.broadcastState();
+          return Promise.resolve();
+        }
       }
 
       // Clear any ongoing spin transitions
@@ -523,73 +649,78 @@ class SpinampAudioEngine {
         (this.audioElement as any).webkitPreservesPitch = false;
       }
       
-      const targetRate = 1.0;
+      const targetRate = this.userPlaybackRate;
       
       // Start/resume play immediately at the low speed
       this.setPlaybackRateSafe(currentRate);
       
-      this.audioElement.play().then(() => {
-        // Spin up to full speed
-        const duration = 650; // ms for the spin up
-        const interval = 20; // step every 20ms
-        const steps = duration / interval;
-        let stepCount = 0;
-        const startRate = currentRate;
-        const startVolume = 0.2; // slight swell up
-        const targetVolume = this.playerState.volume;
+      try {
+        return this.audioElement.play().then(() => {
+          // Spin up to full speed
+          const duration = 650; // ms for the spin up
+          const interval = 20; // step every 20ms
+          const steps = duration / interval;
+          let stepCount = 0;
+          const startRate = currentRate;
+          const startVolume = 0.2; // slight swell up
+          const targetVolume = this.playerState.volume;
 
-        this.spinTimer = setInterval(() => {
-          stepCount++;
-          const progress = Math.min(1.0, stepCount / steps); // 0 to 1
-          
-          // Smooth easing-out curve for spin up
-          const easedProgress = Math.sin(progress * Math.PI / 2);
-          const nextRate = startRate + (targetRate - startRate) * easedProgress;
-
-          if (this.audioElement) {
-            this.setPlaybackRateSafe(nextRate);
+          this.spinTimer = setInterval(() => {
+            stepCount++;
+            const progress = Math.min(1.0, stepCount / steps); // 0 to 1
             
-            // Swell volume back to target
-            if (this.volumeGainNode && this.audioCtx) {
-              const currentVolumeScalar = startVolume + (targetVolume - startVolume) * progress;
-              this.volumeGainNode.gain.setTargetAtTime(
-                this.playerState.isMuted ? 0 : currentVolumeScalar,
-                this.audioCtx.currentTime,
-                0.02
-              );
-            }
-          }
+            // Smooth easing-out curve for spin up
+            const easedProgress = Math.sin(progress * Math.PI / 2);
+            const nextRate = startRate + (targetRate - startRate) * easedProgress;
 
-          if (stepCount >= steps || nextRate >= 0.99) {
-            clearInterval(this.spinTimer);
-            this.spinTimer = null;
-            this.setPlaybackRateSafe(1.0);
-            if (this.volumeGainNode && this.audioCtx) {
-              this.volumeGainNode.gain.setTargetAtTime(
-                this.playerState.isMuted ? 0 : this.playerState.volume,
-                this.audioCtx.currentTime,
-                0.02
-              );
+            if (this.audioElement) {
+              this.setPlaybackRateSafe(nextRate);
+              
+              // Swell volume back to target
+              if (this.volumeGainNode && this.audioCtx) {
+                const currentVolumeScalar = startVolume + (targetVolume - startVolume) * progress;
+                this.volumeGainNode.gain.setTargetAtTime(
+                  this.playerState.isMuted ? 0 : currentVolumeScalar,
+                  this.audioCtx.currentTime,
+                  0.02
+                );
+              }
             }
+
+            if (stepCount >= steps || nextRate >= 0.99) {
+              clearInterval(this.spinTimer);
+              this.spinTimer = null;
+              this.setPlaybackRateSafe(this.userPlaybackRate);
+              if (this.volumeGainNode && this.audioCtx) {
+                this.volumeGainNode.gain.setTargetAtTime(
+                  this.playerState.isMuted ? 0 : this.playerState.volume,
+                  this.audioCtx.currentTime,
+                  0.02
+                );
+              }
+            }
+          }, interval);
+          this.consecutivePlayFailures = 0;
+        }).catch((err) => {
+          console.warn('Playback failed, need user interaction first: ', err);
+          if (this.lastPlayFailureTrackId === this.currentTrack?.id) {
+            this.consecutivePlayFailures++;
+          } else {
+            this.consecutivePlayFailures = 1;
+            this.lastPlayFailureTrackId = this.currentTrack?.id || null;
           }
-        }, interval);
-        this.consecutivePlayFailures = 0;
-      }).catch((err) => {
-        console.warn('Playback failed, need user interaction first: ', err);
-        if (this.lastPlayFailureTrackId === this.currentTrack?.id) {
-          this.consecutivePlayFailures++;
-        } else {
-          this.consecutivePlayFailures = 1;
-          this.lastPlayFailureTrackId = this.currentTrack?.id || null;
-        }
-        if (this.consecutivePlayFailures >= 3) {
-          console.error('[Spinamp] Playback failed 3 times in a row for the same track — stopping automatic retries.');
           this.playerState.isPlaying = false;
           this.broadcastState();
-          return;
-        }
-      });
+          return Promise.resolve();
+        });
+      } catch (err) {
+        console.warn('Synchronous play call failed:', err);
+        this.playerState.isPlaying = false;
+        this.broadcastState();
+        return Promise.resolve();
+      }
     }
+    return Promise.resolve();
   }
 
   public pause() {
@@ -618,7 +749,7 @@ class SpinampAudioEngine {
         this.expectedPauseRef = true;
         this.audioElement.pause();
         setTimeout(() => { this.expectedPauseRef = false; }, 100);
-        this.setPlaybackRateSafe(1.0);
+        this.setPlaybackRateSafe(this.userPlaybackRate);
         if (this.volumeGainNode && this.audioCtx) {
           this.volumeGainNode.gain.setTargetAtTime(
             this.playerState.isMuted ? 0 : this.playerState.volume,
@@ -685,7 +816,7 @@ class SpinampAudioEngine {
             this.expectedPauseRef = true;
             this.audioElement.pause();
             setTimeout(() => { this.expectedPauseRef = false; }, 100);
-            this.setPlaybackRateSafe(1.0); // Reset rate for next playback
+            this.setPlaybackRateSafe(this.userPlaybackRate); // Reset rate for next playback
           }
           // Restore volume state to the player State's original setting
           if (this.volumeGainNode && this.audioCtx) {
@@ -723,7 +854,7 @@ class SpinampAudioEngine {
       this.expectedPauseRef = true;
       this.audioElement.pause();
       setTimeout(() => { this.expectedPauseRef = false; }, 100);
-      this.setPlaybackRateSafe(1.0);
+      this.setPlaybackRateSafe(this.userPlaybackRate);
       this.audioElement.currentTime = 0;
       this.playerState.currentTime = 0;
       this.playerState.isPlaying = false;
@@ -853,7 +984,7 @@ class SpinampAudioEngine {
     const clampedInput = Math.max(0, Math.min(1, volume));
     this.playerState.volume = clampedInput;
     if (typeof window !== 'undefined') {
-      localStorage.setItem('spinamp_player_volume', clampedInput.toString());
+      safeSetItem('spinamp_player_volume', clampedInput.toString());
     }
     
     // ADD: keep the real system volume in sync with the in-app slider
@@ -875,7 +1006,7 @@ class SpinampAudioEngine {
     this.ensureContext();
     this.playerState.isMuted = isMuted;
     if (typeof window !== 'undefined') {
-      localStorage.setItem('spinamp_player_is_muted', isMuted.toString());
+      safeSetItem('spinamp_player_is_muted', isMuted.toString());
     }
 
     if (this.volumeGainNode) {
@@ -891,7 +1022,7 @@ class SpinampAudioEngine {
   public setShuffle(shuffle: boolean) {
     this.playerState.shuffle = shuffle;
     if (typeof window !== 'undefined') {
-      localStorage.setItem('spinamp_player_shuffle', shuffle.toString());
+      safeSetItem('spinamp_player_shuffle', shuffle.toString());
     }
     this.broadcastState();
   }
@@ -899,7 +1030,7 @@ class SpinampAudioEngine {
   public setRepeat(repeat: 'none' | 'all' | 'one') {
     this.playerState.repeat = repeat;
     if (typeof window !== 'undefined') {
-      localStorage.setItem('spinamp_player_repeat', repeat);
+      safeSetItem('spinamp_player_repeat', repeat);
     }
     if (this.audioElement) {
       this.audioElement.loop = repeat === 'one';
@@ -1359,12 +1490,22 @@ if (typeof window !== 'undefined') {
 export function restoreEqFromStorage(): void {
   if (typeof window === 'undefined') return;
   try {
-    const isOn = localStorage.getItem('spinamp_eq_is_on') !== 'false';
-    const preamp = parseFloat(localStorage.getItem('spinamp_eq_preamp') || '0');
-    const savedBands = localStorage.getItem('spinamp_eq_bands');
+    const isOn = safeGetItem('spinamp_eq_is_on') !== 'false';
+    const preamp = parseFloat(safeGetItem('spinamp_eq_preamp') || '0');
+    const savedBands = safeGetItem('spinamp_eq_bands');
     const bands: number[] = savedBands 
       ? JSON.parse(savedBands) 
       : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+    const bassBoost = safeGetItem('spinamp_bass_boost');
+    if (bassBoost !== null) {
+      spinampAudio.setBassBoost(parseFloat(bassBoost));
+    }
+
+    const speed = safeGetItem('spinamp_playback_rate');
+    if (speed !== null) {
+      spinampAudio.setUserPlaybackRate(parseFloat(speed));
+    }
 
     spinampAudio.updatePreamp(isOn ? preamp : 0);
     bands.forEach((val, idx) => {

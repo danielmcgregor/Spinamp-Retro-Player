@@ -43,6 +43,11 @@ export const AndroidShell: React.FC<AndroidShellProps> = ({
     };
   }, [volume]);
 
+  const volumeRef = useRef(volume);
+  useEffect(() => {
+    volumeRef.current = volume;
+  });
+
   // Handle hotkeys (Shift + Up/Down for fine-tuning volume)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -59,16 +64,16 @@ export const AndroidShell: React.FC<AndroidShellProps> = ({
       const step = 0.05;
       if (e.key === 'ArrowUp' && e.shiftKey) {
         e.preventDefault();
-        onVolumeChange?.(Math.min(1.0, volume + step));
+        onVolumeChange?.(Math.min(1.0, volumeRef.current + step));
       } else if (e.key === 'ArrowDown' && e.shiftKey) {
         e.preventDefault();
-        onVolumeChange?.(Math.max(0.0, volume - step));
+        onVolumeChange?.(Math.max(0.0, volumeRef.current - step));
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [volume, onVolumeChange]);
+  }, [onVolumeChange]);
 
   const themeClass = {
     'classic-steel': 'theme-steel',

@@ -13,6 +13,63 @@ export function drawFire(
 ): void {
   const bufferLength = dataArray.length;
 
+  let themeRGB = '255, 160, 40'; // neon spark base
+  let themeBaseGlow = 'rgba(194, 12, 0, 0.4)';
+  let themeBackGlowStart = 'rgba(140, 6, 0, 0.6)';
+  let themeBackGlowMid = 'rgba(215, 30, 0, 0.15)';
+  let themeMidGlowStart = '#8c0600';
+  let themeMidGlowMid = '#ff3300';
+  let themeMidGlowEnd = '#ffdd55';
+  let themeForeGlowStart = 'rgba(255, 60, 0, 0.8)';
+  let themeForeGlowMid = '#ffffcc';
+  
+  if (visTheme === 'cyberpunk') {
+     themeRGB = '244, 114, 182';
+     themeBaseGlow = 'rgba(109, 40, 217, 0.35)';
+     themeBackGlowStart = 'rgba(76, 29, 149, 0.5)'; themeBackGlowMid = 'rgba(139, 92, 246, 0.15)';
+     themeMidGlowStart = '#6d28d9'; themeMidGlowMid = '#ec4899'; themeMidGlowEnd = '#f472b6';
+     themeForeGlowStart = 'rgba(236, 72, 153, 0.8)'; themeForeGlowMid = '#fbcfe8';
+  } else if (visTheme === 'amber') {
+     themeRGB = '245, 158, 11';
+     themeBaseGlow = 'rgba(120, 53, 15, 0.4)';
+     themeBackGlowStart = 'rgba(120, 53, 15, 0.5)'; themeBackGlowMid = 'rgba(180, 83, 9, 0.15)';
+     themeMidGlowStart = '#78350f'; themeMidGlowMid = '#d97706'; themeMidGlowEnd = '#fef08a';
+     themeForeGlowStart = 'rgba(217, 119, 6, 0.8)'; themeForeGlowMid = '#fef9c3';
+  } else if (visTheme === 'aqua') {
+     themeRGB = '6, 182, 212';
+     themeBaseGlow = 'rgba(30, 58, 138, 0.4)';
+     themeBackGlowStart = 'rgba(30, 58, 138, 0.5)'; themeBackGlowMid = 'rgba(3, 105, 124, 0.15)';
+     themeMidGlowStart = '#1e3a8a'; themeMidGlowMid = '#0369a1'; themeMidGlowEnd = '#7dd3fc';
+     themeForeGlowStart = 'rgba(14, 165, 233, 0.8)'; themeForeGlowMid = '#e0f2fe';
+  } else if (visTheme === 'mono') {
+     themeRGB = '220, 220, 225';
+     themeBaseGlow = 'rgba(39, 39, 42, 0.3)';
+     themeBackGlowStart = 'rgba(39, 39, 42, 0.45)'; themeBackGlowMid = 'rgba(82, 82, 91, 0.12)';
+     themeMidGlowStart = '#18181b'; themeMidGlowMid = '#71717a'; themeMidGlowEnd = '#fafafa';
+     themeForeGlowStart = 'rgba(113, 113, 122, 0.8)'; themeForeGlowMid = '#ffffff';
+  } else if (visTheme === 'crimson') {
+     themeRGB = '225, 29, 72';
+     themeBaseGlow = 'rgba(136, 19, 55, 0.4)';
+     themeBackGlowStart = 'rgba(136, 19, 55, 0.5)'; themeBackGlowMid = 'rgba(190, 18, 60, 0.15)';
+     themeMidGlowStart = '#881337'; themeMidGlowMid = '#e11d48'; themeMidGlowEnd = '#fda4af';
+     themeForeGlowStart = 'rgba(244, 63, 94, 0.8)'; themeForeGlowMid = '#fff1f2';
+  } else if (visTheme === 'custom') {
+    let customAccent = '#ff9100';
+    try {
+      const raw = window.getComputedStyle(document.body).getPropertyValue('--skin-accent');
+      if (raw && raw.trim()) customAccent = raw.trim();
+    } catch(e){}
+    const c = customAccent.startsWith('#') ? customAccent.substring(1) : 'ff9100';
+    const rgb = parseInt(c, 16) || 0;
+    const r = (rgb >> 16) & 0xff; const g = (rgb >> 8) & 0xff; const b = rgb & 0xff;
+    themeRGB = `${r}, ${g}, ${b}`;
+    themeBaseGlow = `rgba(${r}, ${g}, ${b}, 0.3)`;
+    themeBackGlowStart = `rgba(${r}, ${g}, ${b}, 0.4)`; themeBackGlowMid = `rgba(${r}, ${g}, ${b}, 0.1)`;
+    themeMidGlowStart = `rgba(${r}, ${g}, ${b}, 0.5)`; themeMidGlowMid = customAccent; themeMidGlowEnd = '#ffffff';
+    themeForeGlowStart = `rgba(${r}, ${g}, ${b}, 0.8)`; themeForeGlowMid = '#ffffff';
+  }
+
+
   // Get overall bass energy for spark spawning density and coal bed throbbing
   const bassSum = ((dataArray[0] || 0) + (dataArray[1] || 0) + (dataArray[2] || 0) + (dataArray[3] || 0)) / 4;
   const bassNormalized = Math.min(1.0, bassSum / 255);
@@ -53,16 +110,7 @@ export function drawFire(
     }
 
     ctx.beginPath();
-    let sparkColor = `rgba(255, 160, 40, ${p.alpha})`;
-    if (visTheme === 'cyberpunk') {
-      sparkColor = `rgba(244, 114, 182, ${p.alpha})`;
-    } else if (visTheme === 'amber') {
-      sparkColor = `rgba(245, 158, 11, ${p.alpha})`;
-    } else if (visTheme === 'aqua') {
-      sparkColor = `rgba(6, 182, 212, ${p.alpha})`;
-    } else if (visTheme === 'mono') {
-      sparkColor = `rgba(220, 220, 225, ${p.alpha})`;
-    }
+    let sparkColor = `rgba(${themeRGB}, ${p.alpha})`;
 
     ctx.fillStyle = sparkColor;
     ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
@@ -73,17 +121,8 @@ export function drawFire(
   const hearthGlowHeight = Math.max(8, Math.floor(height * 0.18 + bassNormalized * 15));
   const glowGrad = ctx.createLinearGradient(0, height, 0, height - hearthGlowHeight);
   
-  let glowColorBase = 'rgba(194, 12, 0, 0.4)';
+  let glowColorBase = themeBaseGlow;
   let glowColorTop = 'rgba(255, 85, 0, 0)';
-  if (visTheme === 'cyberpunk') {
-    glowColorBase = 'rgba(109, 40, 217, 0.35)';
-  } else if (visTheme === 'amber') {
-    glowColorBase = 'rgba(120, 53, 15, 0.4)';
-  } else if (visTheme === 'aqua') {
-    glowColorBase = 'rgba(30, 58, 138, 0.4)';
-  } else if (visTheme === 'mono') {
-    glowColorBase = 'rgba(39, 39, 42, 0.3)';
-  }
 
   glowGrad.addColorStop(0, glowColorBase);
   glowGrad.addColorStop(1, glowColorTop);
@@ -117,6 +156,18 @@ export function drawFire(
     } else if (visTheme === 'mono') {
       grad.addColorStop(0, 'rgba(39, 39, 42, 0.45)');
       grad.addColorStop(0.6, 'rgba(82, 82, 91, 0.12)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+    } else if (visTheme === 'crimson') {
+      grad.addColorStop(0, 'rgba(136, 19, 55, 0.5)');
+      grad.addColorStop(0.6, 'rgba(190, 18, 60, 0.15)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+    } else if (visTheme === 'custom') {
+      let cAccent = '#ff9100';
+      try { const r = window.getComputedStyle(document.body).getPropertyValue('--skin-accent'); if(r&&r.trim()) cAccent=r.trim(); } catch(e){}
+      const c = cAccent.startsWith('#') ? cAccent.substring(1) : 'ff9100';
+      const rgb = parseInt(c, 16) || 0;
+      grad.addColorStop(0, `rgba(${(rgb>>16)&255}, ${(rgb>>8)&255}, ${rgb&255}, 0.4)`);
+      grad.addColorStop(0.6, `rgba(${(rgb>>16)&255}, ${(rgb>>8)&255}, ${rgb&255}, 0.1)`);
       grad.addColorStop(1, 'rgba(0,0,0,0)');
     } else {
       grad.addColorStop(0, 'rgba(140, 6, 0, 0.6)');
@@ -170,6 +221,20 @@ export function drawFire(
       grad.addColorStop(0.4, '#71717a'); // zinc gray
       grad.addColorStop(0.85, '#fafafa'); // core white
       grad.addColorStop(1, 'rgba(255,255,255,0)');
+    } else if (visTheme === 'crimson') {
+      grad.addColorStop(0, '#881337'); 
+      grad.addColorStop(0.4, '#e11d48'); 
+      grad.addColorStop(0.85, '#fda4af'); 
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+    } else if (visTheme === 'custom') {
+      let cAccent = '#ff9100';
+      try { const r = window.getComputedStyle(document.body).getPropertyValue('--skin-accent'); if(r&&r.trim()) cAccent=r.trim(); } catch(e){}
+      const c = cAccent.startsWith('#') ? cAccent.substring(1) : 'ff9100';
+      const rgb = parseInt(c, 16) || 0;
+      grad.addColorStop(0, `rgba(${(rgb>>16)&255}, ${(rgb>>8)&255}, ${rgb&255}, 0.5)`);
+      grad.addColorStop(0.4, cAccent);
+      grad.addColorStop(0.85, '#ffffff');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
     } else {
       grad.addColorStop(0, '#c20c00'); // lava red base
       grad.addColorStop(0.35, '#ff5500'); // burning orange
@@ -218,6 +283,18 @@ export function drawFire(
     } else if (visTheme === 'mono') {
       grad.addColorStop(0, 'rgba(113, 113, 122, 0.8)');
       grad.addColorStop(0.6, '#ffffff'); // pure white
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+    } else if (visTheme === 'crimson') {
+      grad.addColorStop(0, 'rgba(244, 63, 94, 0.8)');
+      grad.addColorStop(0.6, '#fff1f2'); 
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+    } else if (visTheme === 'custom') {
+      let cAccent = '#ff9100';
+      try { const r = window.getComputedStyle(document.body).getPropertyValue('--skin-accent'); if(r&&r.trim()) cAccent=r.trim(); } catch(e){}
+      const c = cAccent.startsWith('#') ? cAccent.substring(1) : 'ff9100';
+      const rgb = parseInt(c, 16) || 0;
+      grad.addColorStop(0, `rgba(${(rgb>>16)&255}, ${(rgb>>8)&255}, ${rgb&255}, 0.8)`);
+      grad.addColorStop(0.6, '#ffffff');
       grad.addColorStop(1, 'rgba(255,255,255,0)');
     } else {
       // Classic hot fireplace elements

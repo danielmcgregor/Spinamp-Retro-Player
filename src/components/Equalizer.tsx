@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { SkinType, EqPreset } from '../types';
 import { spinampAudio, restoreEqFromStorage } from '../utils/audioContext';
 import { Save, Trash2, X } from 'lucide-react';
+import { safeGetItem, safeSetItem } from '../utils/safeStorage';
 
 interface EqualizerProps {
   skin: SkinType;
@@ -11,7 +12,12 @@ export const EQ_PRESETS: EqPreset[] = [
   { name: 'Flat', preamp: 0, bands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
   { name: 'Full Bass', preamp: 4, bands: [8, 6, 5, 2, 0, -2, -4, -4, -4, -4] },
   { name: 'Rock', preamp: 2, bands: [5, 3, -1, -3, -1, 2, 4, 5, 5, 5] },
+  { name: 'Metal', preamp: 3, bands: [7, 6, 3, -3, -5, -2, 4, 6, 7, 6] },
+  { name: 'Punk', preamp: 2, bands: [4, 3, 1, 3, 5, 6, 5, 4, 3, 2] },
+  { name: 'Industrial', preamp: 3, bands: [6, 5, 2, -2, -3, 3, 5, 6, 6, 4] },
+  { name: 'Dubstep', preamp: 3, bands: [9, 7, 4, -2, -4, -1, 4, 6, 6, 5] },
   { name: 'Techno', preamp: 3, bands: [6, 4, 1, -2, -1, 3, 5, 5, 4, 3] },
+  { name: 'Hip Hop', preamp: 3, bands: [7, 6, 4, 1, -1, 2, 3, 4, 3, 2] },
   { name: 'Classical', preamp: 0, bands: [4, 3, 2, 2, -1, -1, -1, 2, 3, 4] },
   { name: 'Pop', preamp: -1, bands: [-2, -1, 2, 4, 3, -1, -2, -2, -1, -1] },
   { name: 'Vocal', preamp: -2, bands: [-4, -3, 1, 4, 5, 4, 2, -1, -2, -3] }
@@ -21,33 +27,66 @@ const BAND_LABELS = ['60', '170', '310', '600', '1K', '3K', '6K', '12K', '14K', 
 
 export const Equalizer: React.FC<EqualizerProps> = ({ skin }) => {
   const [isOn, setIsOn] = useState<boolean>(() => {
-    const saved = localStorage.getItem('spinamp_eq_is_on');
+    const saved = safeGetItem('spinamp_eq_is_on');
     return saved !== 'false';
   });
   const [preamp, setPreamp] = useState<number>(() => {
-    const saved = localStorage.getItem('spinamp_eq_preamp');
-    return saved ? parseFloat(saved) : 0;
+    const saved = safeGetItem('spinamp_eq_preamp');
+    const val = saved ? parseFloat(saved) : 0;
+    return isNaN(val) ? 0 : val;
   });
   const [bands, setBands] = useState<number[]>(() => {
-    const saved = localStorage.getItem('spinamp_eq_bands');
-    return saved ? JSON.parse(saved) : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    try {
+      const saved = safeGetItem('spinamp_eq_bands');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 10) {
+          return parsed.map((v) => (typeof v === 'number' && !isNaN(v) ? v : 0));
+        }
+      }
+    } catch (e) {
+      console.warn('Error parsing spinamp_eq_bands from storage:', e);
+    }
+    return [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   });
   const [selectedPreset, setSelectedPreset] = useState<string>(() => {
-    return localStorage.getItem('spinamp_eq_selected_preset') || 'Flat';
+    return safeGetItem('spinamp_eq_selected_preset') || 'Flat';
   });
   const [isOpenDropdown, setIsOpenDropdown] = useState<boolean>(false);
   
   // Custom presets state
   const [isSavingPreset, setIsSavingPreset] = useState<boolean>(false);
   const [newPresetName, setNewPresetName] = useState<string>('');
+  const [bassBoost, setBassBoost] = useState<number>(() => {
+    const saved = safeGetItem('spinamp_bass_boost');
+    return saved !== null ? parseFloat(saved) : spinampAudio.getBassBoost();
+  });
+  const [playbackRate, setPlaybackRate] = useState<number>(() => {
+    const saved = safeGetItem('spinamp_playback_rate');
+    return saved !== null ? parseFloat(saved) : spinampAudio.getUserPlaybackRate();
+  });
+
   const [customPresets, setCustomPresets] = useState<EqPreset[]>(() => {
     try {
-      const saved = localStorage.getItem('spinamp_eq_custom_presets');
+      const saved = safeGetItem('spinamp_eq_custom_presets');
       return saved ? JSON.parse(saved) : [];
-    } catch {
+    } catch (e) {
+      console.warn('Error reading spinamp_eq_custom_presets:', e);
       return [];
     }
   });
+
+  const handleBassBoostChange = (db: number) => {
+    setBassBoost(db);
+    spinampAudio.setBassBoost(db);
+    safeSetItem('spinamp_bass_boost', db.toString());
+  };
+
+  const handlePlaybackRateChange = (rate: number) => {
+    setPlaybackRate(rate);
+    spinampAudio.setUserPlaybackRate(rate);
+    safeSetItem('spinamp_playback_rate', rate.toString());
+  };
 
   // Apply state to audio context on mount or whenever settings change
   useEffect(() => {
@@ -63,19 +102,19 @@ export const Equalizer: React.FC<EqualizerProps> = ({ skin }) => {
 
   // Persist settings
   useEffect(() => {
-    localStorage.setItem('spinamp_eq_is_on', isOn.toString());
+    safeSetItem('spinamp_eq_is_on', isOn.toString());
   }, [isOn]);
 
   useEffect(() => {
-    localStorage.setItem('spinamp_eq_preamp', preamp.toString());
+    safeSetItem('spinamp_eq_preamp', preamp.toString());
   }, [preamp]);
 
   useEffect(() => {
-    localStorage.setItem('spinamp_eq_bands', JSON.stringify(bands));
+    safeSetItem('spinamp_eq_bands', JSON.stringify(bands));
   }, [bands]);
 
   useEffect(() => {
-    localStorage.setItem('spinamp_eq_selected_preset', selectedPreset);
+    safeSetItem('spinamp_eq_selected_preset', selectedPreset);
   }, [selectedPreset]);
 
   const handleToggle = () => {
@@ -129,7 +168,7 @@ export const Equalizer: React.FC<EqualizerProps> = ({ skin }) => {
 
     const updated = [...customPresets.filter(p => p.name.toLowerCase() !== name.toLowerCase()), newPreset];
     setCustomPresets(updated);
-    localStorage.setItem('spinamp_eq_custom_presets', JSON.stringify(updated));
+    safeSetItem('spinamp_eq_custom_presets', JSON.stringify(updated));
     setSelectedPreset(name);
     setIsSavingPreset(false);
     setNewPresetName('');
@@ -138,7 +177,7 @@ export const Equalizer: React.FC<EqualizerProps> = ({ skin }) => {
   const handleDeletePreset = (name: string) => {
     const updated = customPresets.filter(p => p.name !== name);
     setCustomPresets(updated);
-    localStorage.setItem('spinamp_eq_custom_presets', JSON.stringify(updated));
+    safeSetItem('spinamp_eq_custom_presets', JSON.stringify(updated));
     if (selectedPreset === name) {
       setSelectedPreset('Flat');
       loadPreset('Flat');
@@ -320,6 +359,47 @@ export const Equalizer: React.FC<EqualizerProps> = ({ skin }) => {
             ))}
           </div>
         </div>
+
+        {/* BASS BOOST & PLAYBACK SPEED AUX ROW */}
+        <div className="mt-2 pt-2 border-t border-neutral-800 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[9px]">
+          {/* Bass Boost */}
+          <div className="bg-black/40 border border-neutral-800 p-1.5 rounded flex items-center justify-between gap-2">
+            <span className="text-amber-500 font-bold tracking-wider">BASS BOOST</span>
+            <div className="flex items-center gap-1.5 flex-1 max-w-[120px]">
+              <input
+                id="classic-bass-boost-slider"
+                type="range"
+                min="0"
+                max="12"
+                step="0.5"
+                value={bassBoost}
+                onChange={(e) => handleBassBoostChange(parseFloat(e.target.value))}
+                className="w-full h-1 bg-neutral-800 rounded appearance-none cursor-pointer accent-amber-500"
+              />
+              <span className="text-amber-400 font-mono font-bold w-8 text-right">+{bassBoost.toFixed(0)}dB</span>
+            </div>
+          </div>
+
+          {/* Speed Selector */}
+          <div className="bg-black/40 border border-neutral-800 p-1.5 rounded flex items-center justify-between gap-1 overflow-x-auto">
+            <span className="text-zinc-400 font-bold shrink-0">SPEED</span>
+            <div className="flex gap-1">
+              {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((rate) => (
+                <button
+                  key={rate}
+                  onClick={() => handlePlaybackRateChange(rate)}
+                  className={`px-1 py-0.5 rounded text-[8px] font-mono transition font-bold cursor-pointer ${
+                    playbackRate === rate
+                      ? 'bg-amber-500 text-black shadow-sm'
+                      : 'bg-neutral-800 text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  {rate}x
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
@@ -484,6 +564,43 @@ export const Equalizer: React.FC<EqualizerProps> = ({ skin }) => {
               </div>
             ))}
           </div>
+
+          {/* Bass Boost & Speed control row in Bento view */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+            <div className="bg-[#202125] border border-[#2a2c31] px-2.5 py-1.5 rounded-md flex items-center justify-between gap-2">
+              <label htmlFor="bento-bass-boost" className="text-[10px] font-bold text-amber-500 shrink-0">BASS BOOST</label>
+              <input
+                id="bento-bass-boost"
+                type="range"
+                min="0"
+                max="12"
+                step="0.5"
+                value={bassBoost}
+                onChange={(e) => handleBassBoostChange(parseFloat(e.target.value))}
+                className="flex-1 h-1 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+              />
+              <span className="text-amber-400 font-mono font-bold text-[10px] w-8 text-right">+{bassBoost.toFixed(0)}dB</span>
+            </div>
+
+            <div className="bg-[#202125] border border-[#2a2c31] px-2.5 py-1.5 rounded-md flex items-center justify-between gap-1 overflow-x-auto">
+              <span className="text-[10px] font-bold text-neutral-400 shrink-0">SPEED</span>
+              <div className="flex gap-1">
+                {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((rate) => (
+                  <button
+                    key={rate}
+                    onClick={() => handlePlaybackRateChange(rate)}
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-mono transition font-bold cursor-pointer ${
+                      playbackRate === rate
+                        ? 'bg-amber-500 text-black shadow-sm'
+                        : 'bg-[#2b2d31] text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    {rate}x
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -491,7 +608,7 @@ export const Equalizer: React.FC<EqualizerProps> = ({ skin }) => {
 
   return (
     <div className="relative w-full">
-      {skin === 'classic' ? renderClassicEq() : renderBentoEq()}
+      {renderBentoEq()}
 
       {/* Saving Dialog Overlay */}
       {isSavingPreset && (

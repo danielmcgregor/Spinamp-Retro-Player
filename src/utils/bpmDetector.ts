@@ -14,7 +14,7 @@ const bpmCache: Record<string, number> = {};
  * based on its title, artist, and duration, ensuring safe playback displays.
  */
 export function getStableFallbackBPM(track: Track): number {
-  const seedString = `${track.title}-${track.artist}-${track.id}`;
+  const seedString = `${track?.title || ''}-${track?.artist || ''}-${track?.id || ''}`;
   let hash = 0;
   for (let i = 0; i < seedString.length; i++) {
     hash = seedString.charCodeAt(i) + ((hash << 5) - hash);
@@ -163,6 +163,23 @@ export async function detectBPMFromBuffer(audioBuffer: AudioBuffer): Promise<num
   }
 }
 
+function safeDecodeAudioData(ctx: BaseAudioContext, buffer: ArrayBuffer): Promise<AudioBuffer | null> {
+  return new Promise((resolve) => {
+    try {
+      const promise = ctx.decodeAudioData(
+        buffer,
+        (decoded) => resolve(decoded),
+        () => resolve(null)
+      );
+      if (promise && typeof promise.then === 'function') {
+        promise.then((decoded) => resolve(decoded)).catch(() => resolve(null));
+      }
+    } catch (_) {
+      resolve(null);
+    }
+  });
+}
+
 /**
  * Central entrypoint to analyze or lookup the BPM for a track.
  * Supports direct web audio contextual decoding if files are local,
@@ -184,17 +201,19 @@ export async function analyzeTrackBPM(track: Track, audioCtx?: BaseAudioContext)
   if (track.file) {
     try {
       const arrayBuffer = await track.file.arrayBuffer();
-      // Use silent offline audio context to decode quickly without playing
-      const offlineCtx = new (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext)(
-        1,
-        44100 * Math.min(45, track.duration || 60),
-        44100
-      );
-      
-      const audioBuffer = await offlineCtx.decodeAudioData(arrayBuffer);
-      const bpm = await detectBPMFromBuffer(audioBuffer);
-      bpmCache[cacheKey] = bpm;
-      return bpm;
+      if (arrayBuffer && arrayBuffer.byteLength > 0) {
+        const OfflineCtxClass = window.OfflineAudioContext || (window as any).webkitOfflineAudioContext;
+        if (OfflineCtxClass) {
+          const frameLength = Math.max(44100, Math.floor(44100 * Math.min(45, track.duration || 60)));
+          const offlineCtx = new OfflineCtxClass(1, frameLength, 44100);
+          const audioBuffer = await safeDecodeAudioData(offlineCtx, arrayBuffer.slice(0));
+          if (audioBuffer) {
+            const bpm = await detectBPMFromBuffer(audioBuffer);
+            bpmCache[cacheKey] = bpm;
+            return bpm;
+          }
+        }
+      }
     } catch (e) {
       console.warn('Failed decoding local audio file for BPM:', e);
     }
@@ -207,15 +226,19 @@ export async function analyzeTrackBPM(track: Track, audioCtx?: BaseAudioContext)
       const res = await fetch(track.url, { mode: 'cors' });
       if (res.ok) {
         const arrayBuffer = await res.arrayBuffer();
-        const offlineCtx = new (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext)(
-          1,
-          44100 * Math.min(45, track.duration || 60),
-          44100
-        );
-        const audioBuffer = await offlineCtx.decodeAudioData(arrayBuffer);
-        const bpm = await detectBPMFromBuffer(audioBuffer);
-        bpmCache[cacheKey] = bpm;
-        return bpm;
+        if (arrayBuffer && arrayBuffer.byteLength > 0) {
+          const OfflineCtxClass = window.OfflineAudioContext || (window as any).webkitOfflineAudioContext;
+          if (OfflineCtxClass) {
+            const frameLength = Math.max(44100, Math.floor(44100 * Math.min(45, track.duration || 60)));
+            const offlineCtx = new OfflineCtxClass(1, frameLength, 44100);
+            const audioBuffer = await safeDecodeAudioData(offlineCtx, arrayBuffer.slice(0));
+            if (audioBuffer) {
+              const bpm = await detectBPMFromBuffer(audioBuffer);
+              bpmCache[cacheKey] = bpm;
+              return bpm;
+            }
+          }
+        }
       }
     } catch (e) {
       // Intentionally silent - fallback on credentials/CORS issues is expected

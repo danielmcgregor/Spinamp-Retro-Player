@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Track, ScreenAppearance, FontPreset } from '../types';
 import { MarqueeText } from './MarqueeText';
 import { Music } from 'lucide-react';
+import { safeGetItem, safeSetItem } from '../utils/safeStorage';
 
 interface UnifiedTrackScreenProps {
   currentTrack: Track | null;
@@ -42,10 +43,10 @@ export const UnifiedTrackScreen: React.FC<UnifiedTrackScreenProps> = ({
 }) => {
   // Load persisted layouts or default (backup local state)
   const [localAppearance, setLocalAppearance] = useState<ScreenAppearance>(() => {
-    return (localStorage.getItem('spinamp_screen_appearance') as ScreenAppearance) || 'default';
+    return (safeGetItem('spinamp_screen_appearance') as ScreenAppearance) || 'default';
   });
   const [localFontPreset, setLocalFontPreset] = useState<FontPreset>(() => {
-    return (localStorage.getItem('spinamp_screen_font') as FontPreset) || 'mono';
+    return (safeGetItem('spinamp_screen_font') as FontPreset) || 'mono';
   });
 
   const [imageError, setImageError] = useState(false);
@@ -73,7 +74,7 @@ export const UnifiedTrackScreen: React.FC<UnifiedTrackScreenProps> = ({
       onChangeAppearance(app);
     } else {
       setLocalAppearance(app);
-      localStorage.setItem('spinamp_screen_appearance', app);
+      safeSetItem('spinamp_screen_appearance', app);
     }
   };
 
@@ -82,20 +83,20 @@ export const UnifiedTrackScreen: React.FC<UnifiedTrackScreenProps> = ({
       onChangeFontPreset(font);
     } else {
       setLocalFontPreset(font);
-      localStorage.setItem('spinamp_screen_font', font);
+      safeSetItem('spinamp_screen_font', font);
     }
   };
 
   // Sync to local storage for local state backup
   useEffect(() => {
     if (appearanceProp === undefined) {
-      localStorage.setItem('spinamp_screen_appearance', localAppearance);
+      safeSetItem('spinamp_screen_appearance', localAppearance);
     }
   }, [localAppearance, appearanceProp]);
 
   useEffect(() => {
     if (fontPresetProp === undefined) {
-      localStorage.setItem('spinamp_screen_font', localFontPreset);
+      safeSetItem('spinamp_screen_font', localFontPreset);
     }
   }, [localFontPreset, fontPresetProp]);
 
@@ -112,7 +113,7 @@ export const UnifiedTrackScreen: React.FC<UnifiedTrackScreenProps> = ({
         ? `C:\\Music\\${escapedRelative}` 
         : `C:\\Music\\Local Uploads\\${currentTrack.file.name}`;
     }
-    const safeTitle = currentTrack.title
+    const safeTitle = (currentTrack?.title || 'Track')
       .replace(/[^a-zA-Z0-9 ]/g, '')
       .toLowerCase()
       .replace(/\s+/g, '_');

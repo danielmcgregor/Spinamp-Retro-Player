@@ -103,7 +103,24 @@ export function drawGuitarHero(
   ctx.fill();
 
   // Outer guardrails with ambient neon wireglow
-  ctx.strokeStyle = visTheme === 'cyberpunk' ? 'rgba(236,72,153,0.5)' : visTheme === 'amber' ? 'rgba(245,158,11,0.5)' : visTheme === 'aqua' ? 'rgba(6,182,212,0.5)' : 'rgba(16,185,129,0.5)';
+  let themeRGB = '16,185,129';
+  if (visTheme === 'cyberpunk') themeRGB = '236,72,153';
+  else if (visTheme === 'amber') themeRGB = '245,158,11';
+  else if (visTheme === 'aqua') themeRGB = '6,182,212';
+  else if (visTheme === 'crimson') themeRGB = '225,29,72';
+  else if (visTheme === 'mono') themeRGB = '255,255,255';
+  else if (visTheme === 'custom') {
+    let customAccent = '#ff9100';
+    try {
+      const raw = window.getComputedStyle(document.body).getPropertyValue('--skin-accent');
+      if (raw && raw.trim()) customAccent = raw.trim();
+    } catch(e){}
+    const c = customAccent.startsWith('#') ? customAccent.substring(1) : 'ff9100';
+    const rgb = parseInt(c, 16);
+    themeRGB = `${(rgb >> 16) & 0xff},${(rgb >> 8) & 0xff},${rgb & 0xff}`;
+  }
+  
+  ctx.strokeStyle = `rgba(${themeRGB},0.5)`;
   ctx.lineWidth = 3.5;
   ctx.beginPath();
   ctx.moveTo(topLeft.x, topLeft.y);
@@ -468,7 +485,7 @@ export function drawGuitarHero(
   const flarePulse = beatIntensity * 25;
   ctx.save();
   const horizonGlow = ctx.createRadialGradient(cx, horizonY - 12, 0, cx, horizonY - 12, 40 + flarePulse);
-  horizonGlow.addColorStop(0, visTheme === 'cyberpunk' ? 'rgba(236,72,153,0.22)' : visTheme === 'amber' ? 'rgba(245,158,11,0.22)' : visTheme === 'aqua' ? 'rgba(6,182,212,0.22)' : 'rgba(16,185,129,0.22)');
+  horizonGlow.addColorStop(0, `rgba(${themeRGB},0.22)`);
   horizonGlow.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = horizonGlow;
   ctx.beginPath();

@@ -40,14 +40,16 @@ export function subscribeNativeVolumeChanges(callback: (percent: number) => void
   if (!isAndroidVolumeBridgeAvailable()) return () => {};
   
   const existingHandler = (window as any).onNativeVolumeChanged;
-  (window as any).onNativeVolumeChanged = (percent: number) => {
+  const wrapper = (percent: number) => {
     if (existingHandler) existingHandler(percent);
     callback(percent);
   };
+  (window as any).onNativeVolumeChanged = wrapper;
   
   return () => {
-    if ((window as any).onNativeVolumeChanged === callback) {
-      delete (window as any).onNativeVolumeChanged;
+    if ((window as any).onNativeVolumeChanged === wrapper) {
+      (window as any).onNativeVolumeChanged = existingHandler || undefined;
+      if (!existingHandler) delete (window as any).onNativeVolumeChanged;
     }
   };
 }

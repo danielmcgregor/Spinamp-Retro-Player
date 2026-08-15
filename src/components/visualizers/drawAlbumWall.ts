@@ -1,8 +1,8 @@
 import React from 'react';
-import { pruneImageCache } from './imageCacheUtils';
+import { getOrLoadResizedImage } from './imageCacheUtils';
 
 export interface AlbumWallState {
-  imageCache: Map<string, HTMLImageElement>;
+  imageCache: Map<string, HTMLCanvasElement | HTMLImageElement>;
 }
 
 export function drawAlbumWall(
@@ -34,7 +34,8 @@ export function drawAlbumWall(
   // Overall audio energy for a subtle global pulse
   let sum = 0;
   for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-  const energy = (sum / dataArray.length / 255) * visSensitivity;
+  const len = dataArray.length || 1;
+  const energy = (sum / len / 255) * visSensitivity;
 
   ctx.clearRect(0, 0, width, height);
 
@@ -44,15 +45,9 @@ export function drawAlbumWall(
     const x = col * cellW;
     const y = row * cellH;
 
-    let img = stateRef.current.imageCache.get(url);
-    if (!img) {
-      img = new Image();
-      img.src = url;
-      stateRef.current.imageCache.set(url, img);
-      pruneImageCache(stateRef.current.imageCache);
-    }
+    const img = getOrLoadResizedImage(url, stateRef.current.imageCache, 512);
 
-    if (img.complete && img.naturalWidth > 0) {
+    if (img) {
       // Subtle per-cell pulse based on position + overall energy
       const cellPhaseOffset = (col + row) * 0.3;
       const scale = 1 + Math.sin(performance.now() / 300 + cellPhaseOffset) * 0.02 * (0.5 + energy);

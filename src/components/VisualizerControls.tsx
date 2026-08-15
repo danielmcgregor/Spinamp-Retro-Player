@@ -2,6 +2,7 @@ import React from 'react';
 import { VisualizerMode } from '../types';
 import { motion } from 'motion/react';
 import { Maximize2, Sliders, Palette, LayoutGrid } from 'lucide-react';
+import { safeSetItem } from '../utils/safeStorage';
 
 interface VisualizerControlsProps {
   visualizerMode: VisualizerMode;
@@ -40,6 +41,8 @@ const VISUALIZER_BTN_MAP: { mode: VisualizerMode; label: string; fullName: strin
   { mode: 'lava-lamp', label: 'LAVA', fullName: 'Cozy fluid-dynamic Lava Lamp blobs' },
   { mode: 'synthwave-grid', label: 'GRID', fullName: 'Tron 3D neon outrun wireframe horizon' },
   { mode: 'plasma-globe', label: 'TESL', fullName: 'Gaseous electric high-voltage Tesla Plasma globe' },
+  { mode: 'keygen', label: 'KGEN', fullName: 'Chiptune cracktro keygen & NFO scroller' },
+  { mode: 'demoscene', label: 'DEMO', fullName: 'Amiga 3D vector twister & copper raster bars' },
   { mode: 'random', label: 'RAND', fullName: 'Multi-mode crossfade lifecycle' },
   { mode: 'off', label: 'OFF', fullName: 'Disable active visual analytics' },
 ];
@@ -61,7 +64,7 @@ export const VisualizerControls: React.FC<VisualizerControlsProps> = ({
     const idx = themes.indexOf(visTheme as any);
     const nextTheme = themes[(idx + 1) % themes.length]!;
     setVisTheme(nextTheme);
-    localStorage.setItem('spinamp_vis_theme', nextTheme);
+    safeSetItem('spinamp_vis_theme', nextTheme);
   };
 
   const handleNextMode = () => {
@@ -217,7 +220,7 @@ export const VisualizerControls: React.FC<VisualizerControlsProps> = ({
                   key={t}
                   onClick={() => {
                     setVisTheme(t);
-                    localStorage.setItem('spinamp_vis_theme', t);
+                    safeSetItem('spinamp_vis_theme', t);
                   }}
                   className={`w-3 h-3 rounded-full ${colors[t]} border ${
                     visTheme === t ? 'border-white scale-110 shadow-[0_0_4px_rgba(255,255,255,0.7)]' : 'border-neutral-950 scale-90 opacity-60 hover:opacity-100'

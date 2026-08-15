@@ -8,7 +8,7 @@ export interface AndroidPickedFile {
 
 /**
  * Returns true if running inside the Spinamp Android APK with the native 
- * file bridge available (added in APK builds from [current date] onward).
+ * file bridge available.
  * Older APK builds or web/desktop contexts will not have this bridge.
  */
 export function isAndroidFileBridgeAvailable(): boolean {
@@ -21,16 +21,25 @@ export function isAndroidFileBridgeAvailable(): boolean {
  * Converts a native-provided virtual URL + filename into a real File object
  * by fetching the bytes from the WebView's asset loader bridge.
  */
-async function pickedFileToFile(picked: AndroidPickedFile): Promise<File> {
-  const response = await fetch(picked.url);
-  const blob = await response.blob();
-  const file = new File([blob], picked.name, { 
-    type: picked.mimeType || blob.type || 'application/octet-stream' 
-  });
-  if (picked.originalUri) {
-    (file as any).androidUri = picked.originalUri;
+async function pickedFileToFile(picked: AndroidPickedFile): Promise<File | null> {
+  try {
+    const response = await fetch(picked.url);
+    if (!response.ok) {
+      console.warn(`Failed to fetch virtual file ${picked.name}: HTTP ${response.status}`);
+      return null;
+    }
+    const blob = await response.blob();
+    const file = new File([blob], picked.name, { 
+      type: picked.mimeType || blob.type || 'application/octet-stream' 
+    });
+    if (picked.originalUri) {
+      (file as any).androidUri = picked.originalUri;
+    }
+    return file;
+  } catch (err) {
+    console.warn(`Error fetching virtual file ${picked.name}:`, err);
+    return null;
   }
-  return file;
 }
 
 /**
@@ -38,7 +47,41 @@ async function pickedFileToFile(picked: AndroidPickedFile): Promise<File> {
  * FLAC/OGG/OPUS files with incorrect MIME tags were invisible in the old picker).
  * Resolves with an empty array if the user cancels.
  */
-export function pickFilesViaAndroidBridge(): Promise<File[]> {
+
+const FETCH_CONCURRENCY = 4; // matches the concurrency already used elsewhere
+
+async function loadFilesWithConcurrencyLimit(
+  picked: AndroidPickedFile[],
+  onProgress?: (loaded: number, total: number, totalBytes?: number) => void
+): Promise<File[]> {
+  const results: File[] = [];
+  let loadedCount = 0;
+  
+  const totalBytes = picked.reduce((acc, f) => acc + (f.size || 0), 0);
+  
+  // Initial pre-load progress event to show total size estimate
+  onProgress?.(0, picked.length, totalBytes);
+
+  for (let i = 0; i < picked.length; i += FETCH_CONCURRENCY) {
+    const batch = picked.slice(i, i + FETCH_CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map((item) => pickedFileToFile(item))
+    );
+    batchResults.forEach((file) => {
+      if (file) {
+        results.push(file);
+      }
+    });
+    loadedCount += batch.length;
+    onProgress?.(loadedCount, picked.length, totalBytes);
+  }
+
+  return results;
+}
+
+export function pickFilesViaAndroidBridge(
+  onProgress?: (loaded: number, total: number, totalBytes?: number) => void
+): Promise<File[]> {
   return new Promise((resolve, reject) => {
     if (!isAndroidFileBridgeAvailable()) {
       reject(new Error('Android file bridge not available'));
@@ -54,7 +97,7 @@ export function pickFilesViaAndroidBridge(): Promise<File[]> {
       cleanup();
       try {
         const picked: AndroidPickedFile[] = JSON.parse(filesJson);
-        const files = await Promise.all(picked.map(pickedFileToFile));
+        const files = await loadFilesWithConcurrencyLimit(picked, onProgress);
         resolve(files);
       } catch (err) {
         reject(err);
@@ -75,7 +118,9 @@ export function pickFilesViaAndroidBridge(): Promise<File[]> {
  * selected folder AND its subfolders (e.g. Artist/Album/track.mp3 structures).
  * Resolves with an empty array if the user cancels.
  */
-export function pickFolderViaAndroidBridge(): Promise<File[]> {
+export function pickFolderViaAndroidBridge(
+  onProgress?: (loaded: number, total: number, totalBytes?: number) => void
+): Promise<File[]> {
   return new Promise((resolve, reject) => {
     if (!isAndroidFileBridgeAvailable()) {
       reject(new Error('Android file bridge not available'));
@@ -91,7 +136,7 @@ export function pickFolderViaAndroidBridge(): Promise<File[]> {
       cleanup();
       try {
         const picked: AndroidPickedFile[] = JSON.parse(filesJson);
-        const files = await Promise.all(picked.map(pickedFileToFile));
+        const files = await loadFilesWithConcurrencyLimit(picked, onProgress);
         resolve(files);
       } catch (err) {
         reject(err);

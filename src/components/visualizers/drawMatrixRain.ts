@@ -10,16 +10,20 @@ export function drawMatrixRain(
   width: number,
   height: number
 ): void {
-  const numCols = Math.floor(width / 5);
+  const numCols = Math.max(1, Math.floor(width / 5));
 
-  // Initialize matrix columns lazily if empty
-  if (matrixRef.current.length === 0) {
-    for (let c = 0; c < numCols; c++) {
-      matrixRef.current.push({
-        y: Math.random() * -height - 10,
-        speed: 0.15 + Math.random() * 0.7,
-        char: String.fromCharCode(33 + Math.floor(Math.random() * 90)),
-      });
+  // Initialize or adjust matrix columns if canvas width changes
+  if (matrixRef.current.length !== numCols) {
+    if (matrixRef.current.length < numCols) {
+      while (matrixRef.current.length < numCols) {
+        matrixRef.current.push({
+          y: Math.random() * -height - 10,
+          speed: 0.15 + Math.random() * 0.7,
+          char: String.fromCharCode(33 + Math.floor(Math.random() * 90)),
+        });
+      }
+    } else {
+      matrixRef.current.length = numCols;
     }
   }
 
@@ -66,6 +70,17 @@ export function drawMatrixRain(
     } else if (visTheme === 'mono') {
       trailColor1 = 'rgba(220, 220, 220, 0.85)';
       trailColor2 = 'rgba(75, 75, 75, 0.45)';
+    } else if (visTheme === 'crimson') {
+      trailColor1 = 'rgba(225, 29, 72, 0.85)';
+      trailColor2 = 'rgba(136, 19, 55, 0.45)';
+    } else if (visTheme === 'custom') {
+      let cAccent = '#ff9100';
+      try { const r = window.getComputedStyle(document.body).getPropertyValue('--skin-accent'); if(r&&r.trim()) cAccent=r.trim(); } catch(e){}
+      const c = cAccent.startsWith('#') ? cAccent.substring(1) : 'ff9100';
+      const rgb = parseInt(c, 16) || 0;
+      const rC = (rgb >> 16) & 255; const gC = (rgb >> 8) & 255; const bC = rgb & 255;
+      trailColor1 = `rgba(${rC}, ${gC}, ${bC}, 0.85)`;
+      trailColor2 = `rgba(${Math.max(0, rC-100)}, ${Math.max(0, gC-100)}, ${Math.max(0, bC-100)}, 0.45)`;
     }
 
     // Draw head

@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Track, PlayerState, VisualizerMode } from '../types';
 import { Visualizer } from './Visualizer';
 import { MarqueeText } from './MarqueeText';
+import { spinampAudio } from '../utils/audioContext';
 import { 
   Play, 
   Pause, 
@@ -15,7 +16,13 @@ import {
   Maximize2,
   Minimize2,
   Sparkles,
-  Zap
+  Zap,
+  Keyboard,
+  Gauge,
+  HelpCircle,
+  X,
+  FastForward,
+  Rewind
 } from 'lucide-react';
 
 interface FullScreenVisualizerProps {
@@ -73,6 +80,9 @@ export const FullScreenVisualizer: React.FC<FullScreenVisualizerProps> = ({
   const [dimensions, setDimensions] = useState({ width: 320, height: 240 });
   const [showUiOverlay, setShowUiOverlay] = useState(true);
   const [showTrackToast, setShowTrackToast] = useState(false);
+  const [showKeyboardHud, setShowKeyboardHud] = useState(false);
+  const [userSpeed, setUserSpeed] = useState<number>(() => spinampAudio.getUserPlaybackRate());
+  
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const resizeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const trackToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -98,7 +108,159 @@ export const FullScreenVisualizer: React.FC<FullScreenVisualizerProps> = ({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // mount-only: full UI still shows on entering fullscreen and 
+  }, []);
+
+  const stateRef = useRef({ currentTime, duration, isPlaying, volume: playerState.volume });
+  useEffect(() => {
+    stateRef.current = { currentTime, duration, isPlaying, volume: playerState.volume };
+  });
+
+  // Keyboard navigation shortcut listeners
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
+        return;
+      }
+      resetOverlayTimer();
+
+      const { currentTime, duration, isPlaying, volume } = stateRef.current;
+
+      switch (e.key) {
+        case ' ':
+        case 'k':
+        case 'K':
+          e.preventDefault();
+          if (isPlaying) onPause(); else onPlay();
+          break;
+        case 'ArrowLeft':
+        case 'j':
+        case 'J':
+          e.preventDefault();
+          onSeek(Math.max(0, currentTime - (e.shiftKey ? 15 : 5)));
+          break;
+        case 'ArrowRight':
+        case 'l':
+        case 'L':
+          e.preventDefault();
+          onSeek(Math.min(duration, currentTime + (e.shiftKey ? 15 : 5)));
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          onVolumeChange(Math.min(1, volume + 0.05));
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          onVolumeChange(Math.max(0, volume - 0.05));
+          break;
+        case 'm':
+        case 'M':
+          e.preventDefault();
+          onToggleVisualizerMode();
+          break;
+        case 's':
+        case 'S':
+          e.preventDefault();
+          onShuffleToggle();
+          break;
+        case 'r':
+        case 'R':
+          e.preventDefault();
+          onRepeatToggle();
+          break;
+        case '?':
+        case 'h':
+        case 'H':
+          e.preventDefault();
+          setShowKeyboardHud(prev => !prev);
+          break;
+        case 'Escape':
+          e.preventDefault();
+          onClose();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onPause, onPlay, onSeek, onVolumeChange, onToggleVisualizerMode, onShuffleToggle, onRepeatToggle, onClose, resetOverlayTimer]); // mount-only: full UI still shows on entering fullscreen and 
+
+  // Request full OS/Browser immersive fullscreen mode (hides Android top status bar & navigation buttons)
+  useEffect(() => {
+    const enterFullscreenMode = async () => {
+      try {
+        const docEl = document.documentElement as any;
+        if (!document.fullscreenElement && !docEl.webkitFullscreenElement) {
+          if (docEl.requestFullscreen) {
+            await docEl.requestFullscreen();
+          } else if (docEl.webkitRequestFullscreen) {
+            await docEl.webkitRequestFullscreen();
+          } else if (docEl.msRequestFullscreen) {
+            await docEl.msRequestFullscreen();
+          }
+        }
+      } catch (err) {
+        console.warn('System fullscreen request failed:', err);
+      }
+    };
+
+    // Call Android native bridge methods if available (e.g. inside native Android WebView container)
+    if (typeof window !== 'undefined') {
+      const win = window as any;
+      if (win.AndroidMediaBridge) {
+        if (typeof win.AndroidMediaBridge.hideSystemUI === 'function') {
+          try { win.AndroidMediaBridge.hideSystemUI(); } catch (e) {}
+        }
+        if (typeof win.AndroidMediaBridge.setFullscreen === 'function') {
+          try { win.AndroidMediaBridge.setFullscreen(true); } catch (e) {}
+        }
+      }
+      if (win.AndroidFileBridge) {
+        if (typeof win.AndroidFileBridge.hideSystemUI === 'function') {
+          try { win.AndroidFileBridge.hideSystemUI(); } catch (e) {}
+        }
+        if (typeof win.AndroidFileBridge.setFullscreen === 'function') {
+          try { win.AndroidFileBridge.setFullscreen(true); } catch (e) {}
+        }
+      }
+    }
+
+    enterFullscreenMode();
+
+    return () => {
+      // Exit fullscreen mode on exit/unmount
+      if (typeof document !== 'undefined') {
+        const doc = document as any;
+        if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+          if (doc.exitFullscreen) {
+            doc.exitFullscreen().catch(() => {});
+          } else if (doc.webkitExitFullscreen) {
+            doc.webkitExitFullscreen().catch(() => {});
+          }
+        }
+      }
+
+      // Restore Android native bridge system UI
+      if (typeof window !== 'undefined') {
+        const win = window as any;
+        if (win.AndroidMediaBridge) {
+          if (typeof win.AndroidMediaBridge.showSystemUI === 'function') {
+            try { win.AndroidMediaBridge.showSystemUI(); } catch (e) {}
+          }
+          if (typeof win.AndroidMediaBridge.setFullscreen === 'function') {
+            try { win.AndroidMediaBridge.setFullscreen(false); } catch (e) {}
+          }
+        }
+        if (win.AndroidFileBridge) {
+          if (typeof win.AndroidFileBridge.showSystemUI === 'function') {
+            try { win.AndroidFileBridge.showSystemUI(); } catch (e) {}
+          }
+          if (typeof win.AndroidFileBridge.setFullscreen === 'function') {
+            try { win.AndroidFileBridge.setFullscreen(false); } catch (e) {}
+          }
+        }
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!currentTrack) return;
@@ -160,6 +322,7 @@ export const FullScreenVisualizer: React.FC<FullScreenVisualizerProps> = ({
   }, []);
 
   const formatTime = (secs: number) => {
+    if (!secs || isNaN(secs) || !isFinite(secs) || secs < 0) secs = 0;
     if (timeDisplayMode === 'remaining' && duration > 0) {
       const remainingSecs = Math.max(0, duration - secs);
       const min = Math.floor(remainingSecs / 60);
@@ -200,6 +363,8 @@ export const FullScreenVisualizer: React.FC<FullScreenVisualizerProps> = ({
     'lava-lamp',
     'synthwave-grid',
     'plasma-globe',
+    'keygen',
+    'demoscene',
     'random',
     'off'
   ];
@@ -238,7 +403,8 @@ export const FullScreenVisualizer: React.FC<FullScreenVisualizerProps> = ({
       <div 
         ref={containerRef} 
         className="absolute inset-0 w-full h-full z-0 cursor-pointer overflow-hidden"
-        title="Double-click to skip to next Visualizer mode!"
+        title="Double-click canvas to skip mode"
+        onClick={() => resetOverlayTimer()}
         onDoubleClick={onToggleVisualizerMode}
       >
         <div style={rotationStyle}>
@@ -300,6 +466,18 @@ export const FullScreenVisualizer: React.FC<FullScreenVisualizerProps> = ({
             <span>CLOSE FULLSCREEN</span>
           </button>
           
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowKeyboardHud(true);
+            }}
+            className="h-8 px-2.5 rounded-lg bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-700/50 flex items-center justify-center gap-1 text-[11px] text-zinc-300 font-bold active:scale-95 transition cursor-pointer"
+            title="View Keyboard & Touch Gesture Commands (?)"
+          >
+            <Keyboard className="w-3.5 h-3.5 text-amber-500" />
+            <span className="hidden sm:inline">KEYS</span>
+          </button>
+
           <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-zinc-400 bg-black/50 px-2 py-1 rounded-md border border-neutral-800">
             <Sparkles className="w-3 h-3 text-amber-500" />
             <span className="uppercase font-mono font-bold tracking-widest">{mode} CHILLOUT</span>
@@ -402,8 +580,8 @@ export const FullScreenVisualizer: React.FC<FullScreenVisualizerProps> = ({
         {/* AUDIO ACTIONS & UTILITIES DOCK */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
           
-          {/* UTILITY MATRIX: Shuffle & Repeat */}
-          <div className="flex gap-2 shrink-0">
+          {/* UTILITY MATRIX: Shuffle, Repeat & Playback Speed */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
               onClick={onShuffleToggle}
               className={`w-8 h-8 rounded-lg border flex items-center justify-center transition active:scale-90 cursor-pointer ${
@@ -433,6 +611,28 @@ export const FullScreenVisualizer: React.FC<FullScreenVisualizerProps> = ({
                 )}
               </div>
             </button>
+
+            {/* PLAYBACK SPEED CONTROL PILLS */}
+            <div className="flex items-center gap-1 bg-neutral-900/80 p-1 rounded-lg border border-neutral-800 text-[9px] font-mono ml-1">
+              <Gauge className="w-3 h-3 text-amber-500 ml-0.5 shrink-0" />
+              {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((rate) => (
+                <button
+                  key={rate}
+                  onClick={() => {
+                    spinampAudio.setUserPlaybackRate(rate);
+                    setUserSpeed(rate);
+                  }}
+                  className={`px-1.5 py-0.5 rounded transition font-bold cursor-pointer ${
+                    userSpeed === rate
+                      ? 'bg-amber-500 text-black shadow-[0_0_6px_rgba(245,158,11,0.4)]'
+                      : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                  }`}
+                  title={`Playback Speed: ${rate}x`}
+                >
+                  {rate}x
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* MAIN PLAYER ACTIONS BAR */}
@@ -503,6 +703,71 @@ export const FullScreenVisualizer: React.FC<FullScreenVisualizerProps> = ({
 
         </div>
       </div>
+
+      {/* KEYBOARD & GESTURE SHORTCUTS HUD MODAL */}
+      {showKeyboardHud && (
+        <div 
+          className="fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => setShowKeyboardHud(false)}
+        >
+          <div 
+            className="bg-neutral-950 border border-neutral-800 p-5 rounded-2xl max-w-md w-full text-left shadow-2xl space-y-4 text-neutral-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center border-b border-neutral-800 pb-3">
+              <div className="flex items-center gap-2 text-amber-500 font-bold text-sm tracking-wide">
+                <Keyboard className="w-4 h-4" />
+                <span>KEYBOARD & TOUCH COMMANDS</span>
+              </div>
+              <button 
+                onClick={() => setShowKeyboardHud(false)} 
+                className="text-neutral-400 hover:text-white transition cursor-pointer p-1 rounded-lg hover:bg-neutral-900"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 font-mono text-xs">
+              <div className="bg-neutral-900/80 p-2 rounded-xl border border-neutral-800 flex justify-between items-center">
+                <span className="text-neutral-400">Play / Pause</span>
+                <span className="bg-black text-amber-400 px-1.5 py-0.5 rounded border border-neutral-700 font-bold">Space</span>
+              </div>
+              <div className="bg-neutral-900/80 p-2 rounded-xl border border-neutral-800 flex justify-between items-center">
+                <span className="text-neutral-400">Seek ±5s</span>
+                <span className="bg-black text-amber-400 px-1.5 py-0.5 rounded border border-neutral-700 font-bold">← / →</span>
+              </div>
+              <div className="bg-neutral-900/80 p-2 rounded-xl border border-neutral-800 flex justify-between items-center">
+                <span className="text-neutral-400">Seek ±15s</span>
+                <span className="bg-black text-amber-400 px-1.5 py-0.5 rounded border border-neutral-700 font-bold">Shift+←/→</span>
+              </div>
+              <div className="bg-neutral-900/80 p-2 rounded-xl border border-neutral-800 flex justify-between items-center">
+                <span className="text-neutral-400">Volume ±5%</span>
+                <span className="bg-black text-amber-400 px-1.5 py-0.5 rounded border border-neutral-700 font-bold">↑ / ↓</span>
+              </div>
+              <div className="bg-neutral-900/80 p-2 rounded-xl border border-neutral-800 flex justify-between items-center">
+                <span className="text-neutral-400">Cycle Modes</span>
+                <span className="bg-black text-amber-400 px-1.5 py-0.5 rounded border border-neutral-700 font-bold">M</span>
+              </div>
+              <div className="bg-neutral-900/80 p-2 rounded-xl border border-neutral-800 flex justify-between items-center">
+                <span className="text-neutral-400">Shuffle</span>
+                <span className="bg-black text-amber-400 px-1.5 py-0.5 rounded border border-neutral-700 font-bold">S</span>
+              </div>
+              <div className="bg-neutral-900/80 p-2 rounded-xl border border-neutral-800 flex justify-between items-center">
+                <span className="text-neutral-400">Repeat</span>
+                <span className="bg-black text-amber-400 px-1.5 py-0.5 rounded border border-neutral-700 font-bold">R</span>
+              </div>
+              <div className="bg-neutral-900/80 p-2 rounded-xl border border-neutral-800 flex justify-between items-center">
+                <span className="text-neutral-400">Exit Fullscreen</span>
+                <span className="bg-black text-amber-400 px-1.5 py-0.5 rounded border border-neutral-700 font-bold">Esc</span>
+              </div>
+            </div>
+
+            <div className="bg-amber-500/10 border border-amber-500/30 p-2.5 rounded-xl text-[11px] text-amber-300 font-sans leading-relaxed">
+
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

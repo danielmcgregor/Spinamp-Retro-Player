@@ -16,7 +16,8 @@ export function drawWaveformRiver(
   for (let i = 0; i < dataArray.length; i++) {
     sum += dataArray[i];
   }
-  const currentAmplitude = (sum / dataArray.length / 255) * visSensitivity;
+  const len = dataArray.length || 1;
+  const currentAmplitude = (sum / len / 255) * visSensitivity;
 
   // Push the new sample, cap history length to avoid unbounded growth
   historyRef.current.push(currentAmplitude);

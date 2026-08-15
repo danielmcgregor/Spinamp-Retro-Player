@@ -2,7 +2,7 @@ import React, { useState, useRef, useId } from 'react';
 import { Track } from '../types';
 import { Star, ShieldAlert, Library, History, Award, HeartHandshake, Play, Pause, RotateCcw, HelpCircle, FolderOpen, Music, Search, Info, Volume2 } from 'lucide-react';
 import { spinampAudio } from '../utils/audioContext';
-import { isAndroidWebView } from '../utils/platformDetect';
+import { isAndroidWebView, isAndroid, isIOS } from '../utils/platformDetect';
 import { 
   isAndroidFileBridgeAvailable, 
   pickFilesViaAndroidBridge, 
@@ -18,6 +18,7 @@ interface MediaLibraryProps {
   isPlaying: boolean;
   onAddFiles?: (files: FileList | File[]) => void;
   loadingFilesMessage?: string;
+  onSetLoadingMessage?: (msg: string | null) => void;
 }
 
 export const MediaLibrary = React.memo<MediaLibraryProps>(({
@@ -29,6 +30,7 @@ export const MediaLibrary = React.memo<MediaLibraryProps>(({
   isPlaying,
   onAddFiles,
   loadingFilesMessage,
+  onSetLoadingMessage,
 }) => {
   const fileInputId = useId();
   const folderInputId = useId();
@@ -58,11 +60,15 @@ export const MediaLibrary = React.memo<MediaLibraryProps>(({
     const term = searchTerm.toLowerCase().trim();
     if (!term) return tracks;
     return tracks.filter((track) => {
+      const title = track.title || '';
+      const artist = track.artist || '';
+      const album = track.album || '';
+      const genre = track.genre || '';
       return (
-        track.title.toLowerCase().includes(term) ||
-        track.artist.toLowerCase().includes(term) ||
-        track.album.toLowerCase().includes(term) ||
-        (track.genre && track.genre.toLowerCase().includes(term))
+        title.toLowerCase().includes(term) ||
+        artist.toLowerCase().includes(term) ||
+        album.toLowerCase().includes(term) ||
+        genre.toLowerCase().includes(term)
       );
     });
   }, [tracks, searchTerm]);
@@ -107,12 +113,20 @@ export const MediaLibrary = React.memo<MediaLibraryProps>(({
     if (e.target.files && e.target.files.length > 0 && onAddFiles) {
       onAddFiles(e.target.files);
     }
+    e.target.value = '';
   };
 
   const handleAddFilesClick = async () => {
     if (isAndroidFileBridgeAvailable()) {
       try {
-        const files = await pickFilesViaAndroidBridge();
+        const files = await pickFilesViaAndroidBridge((loaded, total, totalBytes) => {
+          const sizeStr = (totalBytes && totalBytes > 0) ? ` (${(totalBytes / (1024 * 1024)).toFixed(1)} MB)` : '';
+          if (loaded === 0) {
+            onSetLoadingMessage?.(`Preparing to load ${total} files${sizeStr} from device...`);
+          } else {
+            onSetLoadingMessage?.(`Loading ${loaded} of ${total} files${sizeStr} from device...`);
+          }
+        });
         if (files.length > 0 && onAddFiles) {
           onAddFiles(files);
         }
@@ -128,7 +142,14 @@ export const MediaLibrary = React.memo<MediaLibraryProps>(({
   const handleAddFolderClick = async () => {
     if (isAndroidFileBridgeAvailable()) {
       try {
-        const files = await pickFolderViaAndroidBridge();
+        const files = await pickFolderViaAndroidBridge((loaded, total, totalBytes) => {
+          const sizeStr = (totalBytes && totalBytes > 0) ? ` (${(totalBytes / (1024 * 1024)).toFixed(1)} MB)` : '';
+          if (loaded === 0) {
+            onSetLoadingMessage?.(`Preparing to load ${total} files${sizeStr} from device...`);
+          } else {
+            onSetLoadingMessage?.(`Loading ${loaded} of ${total} files${sizeStr} from device...`);
+          }
+        });
         if (files.length > 0 && onAddFiles) {
           onAddFiles(files);
         }
@@ -171,8 +192,38 @@ export const MediaLibrary = React.memo<MediaLibraryProps>(({
     );
   };
 
+  const TableSkeletonRow = React.memo<{ index: number }>(({ index }) => {
+    const titleWidths = ['w-28', 'w-36', 'w-24', 'w-32'];
+    const artistWidths = ['w-20', 'w-16', 'w-24', 'w-18'];
+
+    return (
+      <tr className="border-b border-[#202124] animate-pulse select-none">
+        <td className="py-2.5 px-3">
+          <div className="w-3.5 h-3.5 bg-amber-500/20 rounded flex items-center justify-center">
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-500/50" />
+          </div>
+        </td>
+        <td className="py-2.5 px-2">
+          <div className={`h-3 bg-[#2a2d38] rounded-sm ${titleWidths[index % 4]}`} />
+        </td>
+        <td className="py-2.5 px-2">
+          <div className={`h-2.5 bg-[#20222b] rounded-sm ${artistWidths[index % 4]}`} />
+        </td>
+        <td className="py-2.5 px-2 hidden sm:table-cell">
+          <div className="h-2.5 bg-[#1c1d24] rounded-sm w-20" />
+        </td>
+        <td className="py-2.5 px-2 text-center">
+          <div className="h-2.5 bg-[#20222b] rounded-sm w-6 mx-auto" />
+        </td>
+        <td className="py-2.5 px-2">
+          <div className="h-2.5 bg-[#20222b] rounded-sm w-12 ml-auto" />
+        </td>
+      </tr>
+    );
+  });
+
   const renderTrackTable = (sourceTracks: Track[]) => {
-    if (sourceTracks.length === 0) {
+    if (sourceTracks.length === 0 && !loadingFilesMessage) {
       return (
         <div className="flex flex-col items-center justify-center h-full py-10 text-neutral-500 text-center gap-1.5 font-sans" id="empty-table-view">
           <ShieldAlert className="w-6 h-6 stroke-1.2 text-amber-500/80 mb-1" />
@@ -196,9 +247,9 @@ export const MediaLibrary = React.memo<MediaLibraryProps>(({
             </tr>
           </thead>
           <tbody>
-            {sourceTracks.map((track) => (
+            {sourceTracks.map((track, idx) => (
               <tr
-                key={track.id + (activeTab === 'history' ? Math.random() : '')} // avoid key collisions in history list
+                key={activeTab === 'history' ? `${track.id}_hist_${idx}` : track.id}
                 onClick={() => onSelectTrack(track)}
                 className="border-b border-[#202124] hover:bg-[#1a1b1e] cursor-pointer group transition-colors"
                 id={`track-row-${track.id}`}
@@ -221,6 +272,13 @@ export const MediaLibrary = React.memo<MediaLibraryProps>(({
                 <td className="py-2 px-2">{renderStars(track.id, track.rating)}</td>
               </tr>
             ))}
+            {loadingFilesMessage && (
+              sourceTracks.length === 0 ? (
+                [0, 1, 2, 3, 4].map((i) => <TableSkeletonRow key={`table-skeleton-${i}`} index={i} />)
+              ) : (
+                [0, 1].map((i) => <TableSkeletonRow key={`table-skeleton-extra-${i}`} index={sourceTracks.length + i} />)
+              )
+            )}
           </tbody>
         </table>
       </div>
@@ -317,7 +375,7 @@ export const MediaLibrary = React.memo<MediaLibraryProps>(({
               id={fileInputId}
               type="file"
               multiple
-              accept="audio/*, .mp3, .wav, .m4a, .flac, .ogg, .aac, .opus, .webm, .mp4, .mka"
+              accept="audio/*"
               className="sr-only"
               onChange={handleFileChange}
             />
@@ -326,7 +384,7 @@ export const MediaLibrary = React.memo<MediaLibraryProps>(({
               id={folderInputId}
               type="file"
               multiple
-              accept="audio/*, .mp3, .wav, .m4a, .flac, .ogg, .aac, .opus, .webm, .mp4, .mka"
+              accept="audio/*"
               {...(!isAndroidWebView() ? {
                 webkitdirectory: "",
                 directory: ""
@@ -338,21 +396,6 @@ export const MediaLibrary = React.memo<MediaLibraryProps>(({
             {/* Media Library Toolbar */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 p-1.5 bg-[#15161a] border border-[#232428] rounded-md mb-3" id="library-toolbar">
               <div className="flex items-center gap-1.5" id="library-actions">
-                <button
-                  id="btn-add-folder"
-                  onClick={() => {
-                    if (typeof window !== 'undefined') {
-                      window.dispatchEvent(new CustomEvent('music-player-diagnostic', { detail: { type: isMobile ? 'file' : 'folder' } }));
-                    }
-                    handleAddFolderClick();
-                  }}
-                  className="px-2 py-1 text-[9.5px] font-bold uppercase rounded bg-neutral-800 hover:bg-neutral-750 border border-neutral-700/80 text-amber-500 hover:text-amber-400 transition cursor-pointer flex items-center gap-1 select-none pointer-events-auto"
-                  title="Add folder of music (falls back to files on mobile)"
-                  aria-label="Add folder of music"
-                >
-                  <FolderOpen className="w-3 h-3 text-amber-500" /> 
-                  {isAndroidFileBridgeAvailable() || !isAndroidWebView() ? "+ Add Folder" : "+ Add Files"}
-                </button>
                 <button
                   id="btn-add-files"
                   onClick={() => {
@@ -410,10 +453,18 @@ export const MediaLibrary = React.memo<MediaLibraryProps>(({
             </div>
 
             {loadingFilesMessage && (
-              <div className="bg-amber-500/10 border border-amber-500/30 rounded-md p-2.5 mb-3 flex items-center justify-between text-[11px] text-amber-400 font-sans animate-pulse">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                  <span>{loadingFilesMessage}</span>
+              <div className="flex items-center justify-between px-2.5 py-1.5 mb-3 bg-[#18191e] border border-amber-500/30 rounded-md text-[10.5px] text-amber-400 font-mono font-medium animate-pulse shadow-md">
+                <div className="flex items-center gap-2 truncate">
+                  <div className="relative flex items-center justify-center w-2 h-2 shrink-0">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 animate-ping" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500" />
+                  </div>
+                  <span className="truncate">{loadingFilesMessage}</span>
+                </div>
+                <div className="flex items-center gap-0.5 shrink-0 ml-2">
+                  <span className="w-0.5 h-2.5 bg-amber-500/80 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                  <span className="w-0.5 h-3.5 bg-amber-500/80 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                  <span className="w-0.5 h-2 bg-amber-500/80 rounded-full animate-bounce" />
                 </div>
               </div>
             )}
@@ -456,7 +507,7 @@ export const MediaLibrary = React.memo<MediaLibraryProps>(({
                     </h5>
                     {artistGroups.length === 0 ? (
                       <div className="text-center py-6 text-[10px] text-neutral-600 font-sans" id="no-artists-message">
-                        No artists found. Try clicking "+ Add Folder" above.
+                        No artists found. Try clicking "+ Add Files" above.
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 px-0.5 pr-1 max-h-[200px] overflow-y-auto" id="artists-scroll-viewport">
@@ -509,7 +560,7 @@ export const MediaLibrary = React.memo<MediaLibraryProps>(({
                     </h5>
                     {albumGroups.length === 0 ? (
                       <div className="text-center py-6 text-[10px] text-neutral-600 font-sans" id="no-albums-message">
-                        No albums found. Try clicking "+ Add Folder" above.
+                        No albums found. Try clicking "+ Add Files" above.
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 px-0.5 pr-1 max-h-[200px] overflow-y-auto" id="albums-scroll-viewport">

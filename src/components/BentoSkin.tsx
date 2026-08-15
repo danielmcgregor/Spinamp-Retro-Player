@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Track, PlayerState, VisualizerMode, ScreenAppearance, FontPreset } from '../types';
+import { Track, PlayerState, VisualizerMode, ScreenAppearance, FontPreset, SkinType } from '../types';
 import { Visualizer } from './Visualizer';
 import { UnifiedTrackScreen } from './UnifiedTrackScreen';
 import { MarqueeText } from './MarqueeText';
@@ -32,6 +32,7 @@ const SeekBar: React.FC<SeekBarProps> = React.memo(({
   const percentProgress = duration > 0 ? (currentTime / duration) * 100 : 0;
   
   const formatTime = (secs: number) => {
+    if (!secs || isNaN(secs) || !isFinite(secs) || secs < 0) return '0:00';
     const min = Math.floor(secs / 60);
     const sec = Math.floor(secs % 60);
     return `${min}:${sec < 10 ? '0' : ''}${sec}`;
@@ -126,7 +127,10 @@ interface BentoSkinProps {
   fontPreset?: FontPreset;
   onChangeFontPreset?: (font: FontPreset) => void;
   onOpenCustomSkinCreator?: () => void;
+  skin?: SkinType;
+  onSkinChange?: (skin: SkinType) => void;
   loadingFilesMessage?: string;
+  onSetLoadingMessage?: (msg: string | null) => void;
   onReimportTrack?: (id: string) => void;
   onAddRippedTracks?: (newTracks: Track[]) => void;
 }
@@ -182,7 +186,10 @@ export const BentoSkin = React.memo(({
   fontPreset,
   onChangeFontPreset,
   onOpenCustomSkinCreator,
+  skin = 'bento',
+  onSkinChange,
   loadingFilesMessage,
+  onSetLoadingMessage,
   onReimportTrack,
   onAddRippedTracks,
 }: BentoSkinProps) => {
@@ -263,6 +270,7 @@ export const BentoSkin = React.memo(({
 
   // Formatting helpers
   const formatTime = (secs: number) => {
+    if (!secs || isNaN(secs) || !isFinite(secs) || secs < 0) secs = 0;
     if (timeDisplayMode === 'remaining' && duration > 0) {
       const remainingSecs = Math.max(0, duration - secs);
       const min = Math.floor(remainingSecs / 60);
@@ -282,12 +290,13 @@ export const BentoSkin = React.memo(({
           {/* 1. TOP HEADER BRAND PANEL */}
           <div id="bento-logo-strip-landscape" className="flex justify-between items-center bg-[#131416] border border-[#2b2d31] p-2 px-3 rounded-md shadow-inner shrink-0 leading-none">
             <div className="flex items-center gap-2">
-              {/* Mini stylized lightning ball */}
-              <svg viewBox="0 0 100 100" className="w-[28px] h-[28px] animate-[spin_8s_linear_infinite] drop-shadow-[0_0_5px_rgba(245,158,11,0.55)]">
-                <circle cx="50" cy="50" r="42" fill="none" stroke="#f59e0b" strokeWidth="5" strokeDasharray="18 12" className="opacity-80" />
-                <path d="M52 18 L34 52 L54 52 L44 82 L68 44 L46 44 Z" fill="#fbbf24" />
-                <circle cx="50" cy="50" r="8" fill="#ffffff" />
-              </svg>
+              {/* Spinamp App Logo */}
+              <img
+                src="/spinamp_logo.jpg?v=2"
+                alt="Spinamp Logo"
+                className="w-[28px] h-[28px] rounded-lg object-cover border border-neutral-700 shadow-sm shrink-0"
+                referrerPolicy="no-referrer"
+              />
               <span className="text-[11.5px] font-extrabold text-amber-500 uppercase tracking-widest leading-none">SPINAMP RETRO PLAYER</span>
               
               {/* SKIN BUTTON CHIP */}
@@ -370,7 +379,30 @@ export const BentoSkin = React.memo(({
                 </div>
               </div>
             </div>
-            <div className="text-[9px] text-amber-500 font-bold uppercase tracking-wider text-right">Llama Whipper</div>
+            
+            <div className="flex items-center gap-2">
+              <div className="flex bg-[#101113] border border-neutral-700/80 p-0.5 rounded-md text-[9px] font-bold h-7 items-center">
+                <button
+                  onClick={() => onSkinChange?.('bento')}
+                  className={`px-2 h-full flex items-center justify-center rounded transition cursor-pointer ${
+                    skin === 'bento' ? 'bg-amber-500 text-black font-extrabold shadow-xs' : 'text-neutral-400 hover:text-white'
+                  }`}
+                  title="Switch to Bento 🍱 Layout"
+                >
+                  🍱 Bento
+                </button>
+                <button
+                  onClick={() => onSkinChange?.('driving')}
+                  className={`px-2 h-full flex items-center justify-center rounded transition cursor-pointer ${
+                    skin === 'driving' ? 'bg-amber-500 text-black font-extrabold shadow-xs' : 'text-neutral-400 hover:text-white'
+                  }`}
+                  title="Switch to Driving 🚗 Mode"
+                >
+                  🚗 Driving
+                </button>
+              </div>
+              <div className="text-[9px] text-amber-500 font-bold uppercase tracking-wider text-right hidden lg:block">Llama Whipper</div>
+            </div>
           </div>
 
           {/* 2. CORE DIGITAL LED SCREEN / AUDIO INDICATOR DECK */}
@@ -661,6 +693,7 @@ export const BentoSkin = React.memo(({
                 onClearPlaylist={onClearPlaylist}
                 onReorderTracks={onReorderTracks}
                 loadingFilesMessage={loadingFilesMessage}
+                onSetLoadingMessage={onSetLoadingMessage}
                 onReimportTrack={onReimportTrack}
               />
             )}
@@ -677,6 +710,7 @@ export const BentoSkin = React.memo(({
                 isPlaying={isPlaying}
                 onAddFiles={onAddFiles}
                 loadingFilesMessage={loadingFilesMessage}
+                onSetLoadingMessage={onSetLoadingMessage}
               />
             )}
             {bentoTab === 'manual' && (
@@ -755,13 +789,14 @@ export const BentoSkin = React.memo(({
       {/* 1. TOP HEADER BRAND PANEL */}
       <div id="bento-logo-strip" className="flex justify-between items-center bg-[#131416] border border-[#2b2d31] p-2 px-3 rounded-md shadow-inner shrink-0">
         <div className="flex items-center gap-2">
-          {/* Mini stylized lightning ball */}
-          <svg viewBox="0 0 100 100" className="w-[32px] h-[32px] animate-[spin_8s_linear_infinite] drop-shadow-[0_0_5.5px_rgba(245,158,11,0.6)]">
-            <circle cx="50" cy="50" r="42" fill="none" stroke="#f59e0b" strokeWidth="5" strokeDasharray="18 12" className="opacity-80" />
-            <path d="M52 18 L34 52 L54 52 L44 82 L68 44 L46 44 Z" fill="#fbbf24" />
-            <circle cx="50" cy="50" r="8" fill="#ffffff" />
-          </svg>
-          <span className="text-[12px] font-extrabold text-amber-500 uppercase tracking-widest leading-none">SPINAMP RETRO PLAYER</span>
+          {/* Spinamp App Logo */}
+          <img
+            src="/spinamp_logo.jpg?v=2"
+            alt="Spinamp Logo"
+            className="w-[32px] h-[32px] rounded-lg object-cover border border-neutral-700 shadow-sm shrink-0"
+            referrerPolicy="no-referrer"
+          />
+          <span className="text-[12px] font-extrabold text-amber-500 uppercase tracking-widest leading-none hidden md:inline">SPINAMP RETRO PLAYER</span>
           
           {/* SKIN BUTTON CHIP */}
           <div className="relative group/skin ml-1">
@@ -843,7 +878,30 @@ export const BentoSkin = React.memo(({
             </div>
           </div>
         </div>
-        <div className="text-[10px] text-amber-500 font-bold uppercase tracking-wider text-right">Llama Whipper Edition</div>
+        <div className="flex items-center gap-2">
+          {/* Skin Layout Mode Switcher */}
+          <div className="flex bg-[#101113] border border-neutral-700/80 p-0.5 rounded-md text-[9px] font-bold h-7 items-center">
+            <button
+              onClick={() => onSkinChange?.('bento')}
+              className={`px-2 h-full flex items-center justify-center rounded transition cursor-pointer ${
+                skin === 'bento' ? 'bg-amber-500 text-black font-extrabold shadow-xs' : 'text-neutral-400 hover:text-white'
+              }`}
+              title="Switch to Bento 🍱 Layout"
+            >
+              🍱 Bento
+            </button>
+            <button
+              onClick={() => onSkinChange?.('driving')}
+              className={`px-2 h-full flex items-center justify-center rounded transition cursor-pointer ${
+                skin === 'driving' ? 'bg-amber-500 text-black font-extrabold shadow-xs' : 'text-neutral-400 hover:text-white'
+              }`}
+              title="Switch to Driving 🚗 Mode"
+            >
+              🚗 Driving
+            </button>
+          </div>
+          <div className="text-[10px] text-amber-500 font-bold uppercase tracking-wider text-right hidden lg:block">Llama Whipper Edition</div>
+        </div>
       </div>
 
       {/* 2. CORE DIGITAL LED SCREEN / AUDIO INDICATOR DECK */}
@@ -1153,6 +1211,7 @@ export const BentoSkin = React.memo(({
             onClearPlaylist={onClearPlaylist}
             onReorderTracks={onReorderTracks}
             loadingFilesMessage={loadingFilesMessage}
+                onSetLoadingMessage={onSetLoadingMessage}
             onReimportTrack={onReimportTrack}
           />
         )}
@@ -1169,6 +1228,7 @@ export const BentoSkin = React.memo(({
             isPlaying={isPlaying}
             onAddFiles={onAddFiles}
             loadingFilesMessage={loadingFilesMessage}
+                onSetLoadingMessage={onSetLoadingMessage}
           />
         )}
         {bentoTab === 'manual' && (

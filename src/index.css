@@ -321,15 +321,15 @@
 
   .border-amber-500,
   .border-indigo-700,
-  .border-indigo-700\/65,
-  .border-[#2b2d31],
+  [class*="border-indigo-700/65"],
+  .border-\[\#2b2d31\],
   .border-neutral-700,
   .border-neutral-800 {
     border-color: var(--skin-border) !important;
   }
 
   /* Make sure rating stars and active visualizer options glow */
-  .text-amber-400\/90, .text-amber-500\/90 {
+  [class*="text-amber-400/90"], [class*="text-amber-500/90"] {
     color: var(--skin-accent) !important;
     filter: drop-shadow(0 0 5px var(--skin-accent-shadow)) !important;
   }
@@ -571,7 +571,7 @@
   /* Active track lists and individual selection lists row highlighting */
   div[class*="bg-neutral-800"],
   div[class*="bg-zinc-850"],
-  div[class*="bg-neutral-900/60"].border-neutral-700/50,
+  div[class*="bg-neutral-900/60"][class*="border-neutral-700/50"],
   div[class*="hover:bg-neutral-900"]:hover,
   div[class*="hover:bg-neutral-800"]:hover {
     background-color: var(--skin-accent) !important;
@@ -613,14 +613,14 @@
 
   .border-amber-500,
   .border-indigo-700,
-  .border-indigo-700\/65,
-  .border-[#2b2d31],
+  [class*="border-indigo-700/65"],
+  .border-\[\#2b2d31\],
   .border-neutral-700 {
     border-color: var(--skin-border) !important;
   }
 
   /* Make sure rating stars and active visualizer options glow */
-  .text-amber-400\/90, .text-amber-500\/90 {
+  [class*="text-amber-400/90"], [class*="text-amber-500/90"] {
     color: var(--skin-accent) !important;
     filter: drop-shadow(0 0 5px var(--skin-accent-shadow)) !important;
   }

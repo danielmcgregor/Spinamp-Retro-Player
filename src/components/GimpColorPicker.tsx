@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Pipette, RotateCcw, Plus, Trash2 } from 'lucide-react';
+import { safeGetItem, safeSetItem } from '../utils/safeStorage';
 
 export interface GimpColorPickerProps {
   customSkin: {
@@ -128,9 +129,14 @@ export function GimpColorPicker({ customSkin, onChangeSkinColor, oldColors }: Gi
   // Saved Swatches History Palettes (Persisted in LocalStorage)
   const [swatches, setSwatches] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('gimp_swatch_history');
-      if (saved) return JSON.parse(saved);
-    } catch {}
+      const saved = safeGetItem('gimp_swatch_history');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.warn('Error parsing gimp_swatch_history from storage:', e);
+    }
     return [
       '#ff9100', '#00ffc4', '#00ffd5', '#ff007f', '#f59e0b', '#00ff44',
       '#ff1234', '#a17036', '#12131c', '#0d0d14', '#111317', '#ffffff'
@@ -282,13 +288,68 @@ export function GimpColorPicker({ customSkin, onChangeSkinColor, oldColors }: Gi
     }
   };
 
+  const stateRef = useRef({ hue, saturation, val, red, green, blue, gimpMode });
+  useEffect(() => {
+    stateRef.current = { hue, saturation, val, red, green, blue, gimpMode };
+  });
+
   // Window drag events coordinator
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isDraggingSv) {
-        handleSvDrag(e.clientX, e.clientY);
+        if (!svBoxRef.current) return;
+        const rect = svBoxRef.current.getBoundingClientRect();
+        const x = Math.min(rect.width, Math.max(0, e.clientX - rect.left));
+        const y = Math.min(rect.height, Math.max(0, e.clientY - rect.top));
+        
+        const { hue, saturation, val, red, green, blue, gimpMode } = stateRef.current;
+
+        if (gimpMode === 'H') {
+          const s = Math.round((x / rect.width) * 100);
+          const v = Math.round((1 - y / rect.height) * 100);
+          handleHsvChange(hue, s, v);
+        } else if (gimpMode === 'S') {
+          const h = Math.round((x / rect.width) * 360);
+          const v = Math.round((1 - y / rect.height) * 100);
+          handleHsvChange(h, saturation, v);
+        } else if (gimpMode === 'V') {
+          const h = Math.round((x / rect.width) * 360);
+          const s = Math.round((1 - y / rect.height) * 100);
+          handleHsvChange(h, s, val);
+        } else if (gimpMode === 'R') {
+          const g = Math.round((x / rect.width) * 255);
+          const b = Math.round((1 - y / rect.height) * 255);
+          handleRgbChange(red, g, b);
+        } else if (gimpMode === 'G') {
+          const r = Math.round((x / rect.width) * 255);
+          const b = Math.round((1 - y / rect.height) * 255);
+          handleRgbChange(r, green, b);
+        } else if (gimpMode === 'B') {
+          const r = Math.round((x / rect.width) * 255);
+          const g = Math.round((1 - y / rect.height) * 255);
+          handleRgbChange(r, g, blue);
+        }
       } else if (isDraggingStrip) {
-        handleStripDrag(e.clientY);
+        if (!verticalStripRef.current) return;
+        const rect = verticalStripRef.current.getBoundingClientRect();
+        const y = Math.min(rect.height, Math.max(0, e.clientY - rect.top));
+        const ratio = 1 - y / rect.height;
+        
+        const { hue, saturation, val, red, green, blue, gimpMode } = stateRef.current;
+
+        if (gimpMode === 'H') {
+          handleHsvChange(Math.round(ratio * 360), saturation, val);
+        } else if (gimpMode === 'S') {
+          handleHsvChange(hue, Math.round(ratio * 100), val);
+        } else if (gimpMode === 'V') {
+          handleHsvChange(hue, saturation, Math.round(ratio * 100));
+        } else if (gimpMode === 'R') {
+          handleRgbChange(Math.round(ratio * 255), green, blue);
+        } else if (gimpMode === 'G') {
+          handleRgbChange(red, Math.round(ratio * 255), blue);
+        } else if (gimpMode === 'B') {
+          handleRgbChange(red, green, Math.round(ratio * 255));
+        }
       }
     };
 
@@ -300,10 +361,13 @@ export function GimpColorPicker({ customSkin, onChangeSkinColor, oldColors }: Gi
     // Touch event helpers
     const handleTouchMove = (e: TouchEvent) => {
       if (e.touches.length === 0) return;
-      if (isDraggingSv) {
-        handleSvDrag(e.touches[0].clientX, e.touches[0].clientY);
-      } else if (isDraggingStrip) {
-        handleStripDrag(e.touches[0].clientY);
+      if (isDraggingSv || isDraggingStrip) {
+        // synthesize a pseudo mouse event
+        handleMouseMove({
+          clientX: e.touches[0].clientX,
+          clientY: e.touches[0].clientY,
+          preventDefault: () => e.preventDefault(),
+        } as unknown as MouseEvent);
       }
     };
 
@@ -320,7 +384,7 @@ export function GimpColorPicker({ customSkin, onChangeSkinColor, oldColors }: Gi
       window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleMouseUp);
     };
-  }, [isDraggingSv, isDraggingStrip, hue, saturation, val, red, green, blue, gimpMode]);
+  }, [isDraggingSv, isDraggingStrip]);
 
   // Color Swatch Swapping
   const addSwatch = () => {
@@ -328,13 +392,13 @@ export function GimpColorPicker({ customSkin, onChangeSkinColor, oldColors }: Gi
     if (swatches.includes(cleanHex)) return;
     const newSwatches = [cleanHex, ...swatches.slice(0, 15)];
     setSwatches(newSwatches);
-    localStorage.setItem('gimp_swatch_history', JSON.stringify(newSwatches));
+    safeSetItem('gimp_swatch_history', JSON.stringify(newSwatches));
   };
 
   const removeSwatch = (hexToRemove: string) => {
     const newSwatches = swatches.filter(s => s !== hexToRemove);
     setSwatches(newSwatches);
-    localStorage.setItem('gimp_swatch_history', JSON.stringify(newSwatches));
+    safeSetItem('gimp_swatch_history', JSON.stringify(newSwatches));
   };
 
   // Revert channel color back to the old color

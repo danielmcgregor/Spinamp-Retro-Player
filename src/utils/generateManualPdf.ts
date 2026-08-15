@@ -4,7 +4,7 @@ import { jsPDF } from 'jspdf';
  * Generates a beautiful retro-style operating manual in PDF format.
  * Utilizes high-contrast technical drafting design inspired by 1970s Technics/BASF operating manuals.
  */
-export function generateManualPdf(trackCount: number = 8, activeSkinName: string = 'Classic Steel') {
+export function generateManualPdf(trackCount: number = 8, activeSkinName: string = 'Bento Classic') {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -69,7 +69,8 @@ export function generateManualPdf(trackCount: number = 8, activeSkinName: string
     'MODEL: SA-3000-RETRO AUDIO ENGINE',
     'SERIES: SOLID STATE WAVE-GRAPH SYSTEM',
     'RELEASE EDITION: PRIMETIME PLATINUM',
-    `REVISION: INSTALLED SYSTEM DATA (ACTIVE ENGINE: ${activeSkinName})`
+    `REVISION: INSTALLED SYSTEM DATA (ACTIVE ENGINE: ${activeSkinName})`,
+    `LIBRARY SIZE: ${trackCount} TRACKS LOADED`
   ], 15, 68);
 
   // Central Blueprint / Retro Vector illustration: Stylized Turntable Drawing
@@ -235,7 +236,7 @@ export function generateManualPdf(trackCount: number = 8, activeSkinName: string
     `The receiver is configured with dual layout mappings that reorganizes the visual layout dynamically:
 1. THE BENTO SKIN: A compact, nested grid layout containing unified modular compartments. Features an action header, integrated playlist manager, full-range graphic equalizer panel, and responsive library catalog viewer.
 2. THE CLASSIC SKIN: Emulates iconic 1990s standalone units, combining dense silver-plated brush panels, pixelized digital readout segments, compact slide balances, and an expansive separate auxiliary visualizer panel.
-Select skin colors directly via the Dropdown menu. Six retro factory presets are accessible: Gray Steel, Midnight Violet, Cobalt Blue, Toxic Matrix, Vespa Gold, and Crimson Ruby.`;
+Select skin colors directly via the Dropdown menu. Eight retro factory presets are accessible: Bento Classic, Midnight Violet, Cobalt Blue, Toxic Matrix, Red Fury 4, Walnut Hi-Fi, Neon Synthwave, and Hazard Caution.`;
   const splitSkinInfo = doc.splitTextToSize(skinInfo, pageWidth - 30);
   doc.text(splitSkinInfo, 15, currentY + 18);
 
@@ -430,7 +431,7 @@ By analyzing local audio frequency packets, identifying peak energy thresholds, 
   doc.setFontSize(9.5);
   const maintText = 
     `1. RESTORING SYSTEM FACTORY DEFAULTS:
-If local storage buffers or presets become corrupted or if you desire a clean slate, click the "Restore Defaults" item inside either the Bento skin options dropdown or directly on the main Welcome Power On splash panel. This instantly executes a hard reset coordinates purge: clearing skin selections back to Gray Steel, restoring the queue list back to original high-fidelity demo track configurations, deleting cached statistics data, and turning off the power safely to reset active circuit loops.
+If local storage buffers or presets become corrupted or if you desire a clean slate, click the "Restore Defaults" item inside either the Bento skin options dropdown or directly on the main Welcome Power On splash panel. This instantly executes a hard reset coordinates purge: clearing skin selections back to Bento Classic, restoring the queue list back to original high-fidelity demo track configurations, deleting cached statistics data, and turning off the power safely to reset active circuit loops.
 
 2. PREVENTING DIGITAL CLIP BLUR:
 If the visualizer oscillates excessively, lower the "VIS SENSITIVITY" slider parameter. This re-indexes the scaling variables of the frequency arrays, providing clean, high-contrast spectrum visual display shapes.`;

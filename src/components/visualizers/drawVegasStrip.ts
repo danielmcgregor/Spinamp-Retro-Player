@@ -37,6 +37,28 @@ export function drawVegasStrip(
     vegasJackpotTextRef
   } = refs;
 
+  let themeNeon = '#10b981'; // neon
+  let themeLight = '#34d399';
+  let themeTrans = 'rgba(16, 185, 129, 0.8)';
+  if (visTheme === 'cyberpunk') { themeNeon = '#ec4899'; themeLight = '#f472b6'; themeTrans = 'rgba(236,72,153, 0.72)'; }
+  else if (visTheme === 'amber') { themeNeon = '#f59e0b'; themeLight = '#fbbf24'; themeTrans = 'rgba(245, 158, 11, 0.8)'; }
+  else if (visTheme === 'aqua') { themeNeon = '#06b6d4'; themeLight = '#38bdf8'; themeTrans = 'rgba(34, 211, 238, 0.8)'; }
+  else if (visTheme === 'crimson') { themeNeon = '#e11d48'; themeLight = '#fb7185'; themeTrans = 'rgba(225, 29, 72, 0.8)'; }
+  else if (visTheme === 'mono') { themeNeon = '#d4d4d4'; themeLight = '#ffffff'; themeTrans = 'rgba(212, 212, 212, 0.8)'; }
+  else if (visTheme === 'custom') {
+    let customAccent = '#ff9100';
+    try {
+      const raw = window.getComputedStyle(document.body).getPropertyValue('--skin-accent');
+      if (raw && raw.trim()) customAccent = raw.trim();
+    } catch(e){}
+    themeNeon = customAccent;
+    themeLight = '#ffffff';
+    // Convert to rgba for themeTrans
+    const c = customAccent.startsWith('#') ? customAccent.substring(1) : 'ff9100';
+    const rgb = parseInt(c, 16);
+    themeTrans = `rgba(${(rgb >> 16) & 0xff}, ${(rgb >> 8) & 0xff}, ${rgb & 0xff}, 0.8)`;
+  }
+
   // Calculate energy bands
   let bassValue = 0;
   for (let i = 0; i < 8; i++) {
@@ -186,7 +208,7 @@ export function drawVegasStrip(
 
   // Pulse neon rim of Ferris Wheel to mid ranges
   const rimGlow = 1.5 + (midValue / 255) * 12 * visSensitivity;
-  ctx.strokeStyle = visTheme === 'cyberpunk' ? '#ec4899' : visTheme === 'amber' ? '#f59e0b' : visTheme === 'aqua' ? '#06b6d4' : '#10b981';
+  ctx.strokeStyle = themeNeon;
   ctx.shadowColor = ctx.strokeStyle;
   ctx.shadowBlur = rimGlow;
   ctx.lineWidth = 2.0;
@@ -248,7 +270,7 @@ export function drawVegasStrip(
 
   // Glowing laser beacon on eiffel tower tip reacting to treble
   const towerTipGlow = 1 + (trebleValue / 255) * 16 * visSensitivity;
-  ctx.strokeStyle = visTheme === 'cyberpunk' ? '#f472b6' : visTheme === 'amber' ? '#fbbf24' : visTheme === 'aqua' ? '#38bdf8' : '#34d399';
+  ctx.strokeStyle = themeLight;
   ctx.lineWidth = 2.0;
   ctx.shadowColor = ctx.strokeStyle;
   ctx.shadowBlur = towerTipGlow;
@@ -297,7 +319,7 @@ export function drawVegasStrip(
     const fNorm = fVal / 255;
     const barVal = fNorm * 8.5 * visSensitivity;
 
-    ctx.fillStyle = visTheme === 'cyberpunk' ? 'rgba(236,72,153, 0.72)' : visTheme === 'amber' ? 'rgba(245, 158, 11, 0.8)' : 'rgba(34, 211, 238, 0.8)';
+    ctx.fillStyle = themeTrans;
     ctx.fillRect(eqX + i * (barW + barGap), eqY - barVal, barW, barVal);
   }
 
@@ -309,7 +331,7 @@ export function drawVegasStrip(
 
   ctx.save();
   ctx.fillStyle = '#1e1b4b'; // Slot casing deep indigo
-  ctx.shadowColor = visTheme === 'cyberpunk' ? '#ec4899' : visTheme === 'amber' ? '#fbbf24' : visTheme === 'aqua' ? '#06b6d4' : '#10b981';
+  ctx.shadowColor = themeNeon;
   ctx.shadowBlur = 4 + beatIntensity * 12;
   ctx.strokeStyle = '#4f46e5';
   ctx.lineWidth = 2.5;

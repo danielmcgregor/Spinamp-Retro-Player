@@ -219,7 +219,7 @@ class SynthEngine {
       this.triggerDrum('snare', time, 0.28);
     }
     // HiHats on 2, 6, 10, 14 (off-beat) and some extra upbeat
-    if (drumStep % 2 === 2 || drumStep === 3 || drumStep === 11) {
+    if (drumStep % 4 === 2 || drumStep === 3 || drumStep === 11) {
       this.triggerDrum('hihat', time, 0.15);
     }
 
