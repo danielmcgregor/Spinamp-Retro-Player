@@ -10,6 +10,17 @@ export const isIOS = (): boolean => /iPhone|iPad|iPod/i.test(navigator?.userAgen
 
 export const isMobile = (): boolean => isAndroid() || isIOS();
 
+/**
+ * Checks if a native Android Media Bridge has been injected.
+ * 
+ * NOTE: The "AndroidMediaBridge" is an interface meant to be injected by a native Android WebView wrapper
+ * app that implements a true native Foreground Service and MediaSessionCompat. 
+ * 
+ * If this returns false, it means the app is running in a standard browser or a basic WebView
+ * without native background audio capabilities. In such cases, the OS will aggressively pause
+ * audio playback when the screen turns off. This is expected behavior for web audio until
+ * the native wrapper implements the Foreground Service.
+ */
 export function isAndroidMediaBridgeAvailable(): boolean {
   return typeof window !== 'undefined' && 
          typeof (window as any).AndroidMediaBridge !== 'undefined' &&

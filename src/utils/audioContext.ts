@@ -33,6 +33,9 @@ class SpinampAudioEngine {
   private expectedPauseRef: boolean = false;
   private wakeLockSentinel: any = null;
   private consecutivePlayFailures: number = 0;
+  private lastUnexpectedPauseLogTime: number = 0;
+  private pendingAutoResume: boolean = false;
+  private lastAutoResumeAttemptTime: number = 0;
   private lastPlayFailureTrackId: string | null = null;
 
   // React Callbacks for UI updates
@@ -133,18 +136,40 @@ class SpinampAudioEngine {
       this.audioElement.addEventListener('play', () => this.onPlayStateChange(true));
       this.audioElement.addEventListener('pause', () => {
         if (!this.expectedPauseRef) {
-          console.warn(
-            '[Spinamp Diagnostic] Audio element paused UNEXPECTEDLY at',
-            new Date().toISOString(),
-            'currentTime:', this.audioElement?.currentTime,
-            'app foreground:', (window as any).AndroidMediaBridge ? 'native bridge present' : 'no bridge',
-            'document.hidden:', document.hidden
-          );
+          const now = Date.now();
+          if (now - this.lastUnexpectedPauseLogTime > 2000) {
+            console.warn(
+              '[Spinamp Diagnostic] Audio element paused UNEXPECTEDLY at',
+              new Date().toISOString(),
+              'currentTime:', this.audioElement?.currentTime,
+              'app foreground:', (window as any).AndroidMediaBridge ? 'native bridge present' : 'no bridge',
+              'document.hidden:', document.hidden
+            );
+            this.lastUnexpectedPauseLogTime = now;
+          }
+
           // Auto-resume if interrupted by screen-off or transient OS focus loss
           if (this.playerState.isPlaying && this.audioElement && !this.audioElement.error) {
-            this.audioElement.play().catch((err) => {
-              console.warn('Auto-resume after unexpected pause pending visibility change:', err);
-            });
+            this.pendingAutoResume = true;
+            
+            // If the document is hidden, do NOT retry immediately to avoid 10ms abort loops.
+            // Wait for visibilitychange to trigger the resume instead.
+            if (typeof document !== 'undefined' && document.hidden) {
+              if (now - this.lastUnexpectedPauseLogTime <= 2000) {
+                 // only log once per throttle window
+              }
+              return; 
+            }
+
+            // If visible, retry but enforce a 1000ms minimum backoff between attempts
+            if (now - this.lastAutoResumeAttemptTime > 1000) {
+              this.lastAutoResumeAttemptTime = now;
+              this.audioElement.play().catch((err) => {
+                if (Date.now() - this.lastUnexpectedPauseLogTime <= 2000) {
+                  console.warn('Auto-resume failed pending visibility change:', err);
+                }
+              });
+            }
             return; // Maintain isPlaying state so it auto-resumes when screen lights back up
           }
         }
@@ -161,11 +186,14 @@ class SpinampAudioEngine {
 
       // Global visibility / pageshow / focus listener to ensure playback survives screen dark / sleep
       const handleBackgroundResume = () => {
-        if (this.playerState.isPlaying) {
+        if (this.playerState.isPlaying || this.pendingAutoResume) {
           this.ensureContext();
           this.requestWakeLock();
           if (this.audioElement && this.audioElement.paused && !this.expectedPauseRef) {
-            this.audioElement.play().catch(() => {});
+            this.lastAutoResumeAttemptTime = Date.now();
+            this.audioElement.play().then(() => {
+              this.pendingAutoResume = false;
+            }).catch(() => {});
           }
         }
       };
