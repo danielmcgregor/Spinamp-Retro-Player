@@ -6,6 +6,7 @@ coverage/
 *.log
 .env*
 !.env.example
+.antigravity/
 
 # Temporary patch scripts
 patch_*
