@@ -149,8 +149,8 @@ class SpinampAudioEngine {
             this.lastUnexpectedPauseLogTime = now;
           }
 
-          // Auto-resume if interrupted by screen-off or transient OS focus loss
-          if (this.playerState.isPlaying && this.audioElement && !this.audioElement.error) {
+          // Auto-resume if interrupted by screen-off, OS focus loss, or backgrounding
+          if (this.playerState.isPlaying && this.audioElement && !this.audioElement.error && !this.expectedPauseRef) {
             this.pendingAutoResume = true;
 
             // Clear any previously pending retry timer to prevent duplicate triggers
@@ -158,31 +158,21 @@ class SpinampAudioEngine {
               clearTimeout(this.autoResumeRetryTimeout);
               this.autoResumeRetryTimeout = null;
             }
-            
-            // If the document is hidden, do NOT retry immediately to avoid 10ms abort loops.
-            // Wait for visibilitychange to trigger the resume instead.
-            if (typeof document !== 'undefined' && document.hidden) {
-              if (now - this.lastUnexpectedPauseLogTime <= 2000) {
-                 // only log once per throttle window
-              }
-              return; 
-            }
 
-            // If visible, retry if backoff window (1000ms) has passed, or schedule a timer for the remaining time
+            // Retry immediately if backoff window (300ms) has passed, or schedule a retry
             const timeSinceLastAttempt = now - this.lastAutoResumeAttemptTime;
-            if (timeSinceLastAttempt >= 1000) {
+            if (timeSinceLastAttempt >= 300) {
               this.lastAutoResumeAttemptTime = now;
+              this.requestWakeLock();
               this.audioElement.play().then(() => {
                 this.pendingAutoResume = false;
               }).catch((err) => {
                 if (Date.now() - this.lastUnexpectedPauseLogTime <= 2000) {
-                  console.warn('Auto-resume failed pending visibility change:', err);
+                  console.warn('Background auto-resume attempt failed:', err);
                 }
               });
             } else {
-              // Safety net: document is visible, but we are inside the 1000ms backoff window.
-              // Schedule a single retry for the remaining backoff duration so playback is not lost.
-              const remainingDelay = Math.max(50, 1000 - timeSinceLastAttempt);
+              const remainingDelay = Math.max(50, 300 - timeSinceLastAttempt);
               this.autoResumeRetryTimeout = setTimeout(() => {
                 this.autoResumeRetryTimeout = null;
                 if (
@@ -191,21 +181,21 @@ class SpinampAudioEngine {
                   this.audioElement &&
                   this.audioElement.paused &&
                   !this.expectedPauseRef &&
-                  !this.audioElement.error &&
-                  (typeof document === 'undefined' || !document.hidden)
+                  !this.audioElement.error
                 ) {
                   this.lastAutoResumeAttemptTime = Date.now();
+                  this.requestWakeLock();
                   this.audioElement.play().then(() => {
                     this.pendingAutoResume = false;
                   }).catch((err) => {
                     if (Date.now() - this.lastUnexpectedPauseLogTime <= 2000) {
-                      console.warn('Deferred auto-resume failed:', err);
+                      console.warn('Deferred background auto-resume failed:', err);
                     }
                   });
                 }
               }, remainingDelay);
             }
-            return; // Maintain isPlaying state so it auto-resumes when screen lights back up
+            return; // Maintain isPlaying = true so audio continues seamlessly in screen-off mode
           }
         }
         if (this.autoResumeRetryTimeout) {
@@ -449,8 +439,8 @@ class SpinampAudioEngine {
           this.wakeLockSentinel = await (navigator as any).wakeLock.request('screen');
           this.wakeLockSentinel.addEventListener('release', () => {
             this.wakeLockSentinel = null;
-            if (this.playerState.isPlaying && typeof document !== 'undefined' && document.visibilityState === 'visible') {
-              setTimeout(() => this.requestWakeLock(), 500);
+            if (this.playerState.isPlaying) {
+              setTimeout(() => this.requestWakeLock(), 300);
             }
           });
         }
