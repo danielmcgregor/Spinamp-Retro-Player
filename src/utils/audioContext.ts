@@ -1505,11 +1505,6 @@ class SpinampAudioEngine {
     if (isAndroidMediaBridgeAvailable()) {
       try {
         const track = this.currentTrack;
-        console.log('[AndroidMediaBridge] updatePlaybackState called', {
-          isPlaying: this.playerState.isPlaying,
-          title: track?.title,
-        });
-        
         const durationMs = Number.isFinite(this.playerState.duration) ? Math.round(this.playerState.duration * 1000) : 0;
         const positionMs = Number.isFinite(this.playerState.currentTime) ? Math.round(this.playerState.currentTime * 1000) : 0;
 
@@ -1523,8 +1518,6 @@ class SpinampAudioEngine {
       } catch (err) {
         console.warn('Error updating Android media bridge:', err);
       }
-    } else {
-      console.log('[AndroidMediaBridge] not available — isAndroidMediaBridgeAvailable() returned false');
     }
   }
 
