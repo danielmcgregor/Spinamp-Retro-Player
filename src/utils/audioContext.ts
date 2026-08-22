@@ -150,7 +150,7 @@ class SpinampAudioEngine {
           }
 
           // Auto-resume if interrupted by screen-off, OS focus loss, or backgrounding
-          if (this.playerState.isPlaying && this.audioElement && !this.audioElement.error && !this.expectedPauseRef) {
+          if (this.playerState.isPlaying && this.audioElement && this.audioElement.paused && !this.audioElement.error && !this.expectedPauseRef) {
             this.pendingAutoResume = true;
 
             // Clear any previously pending retry timer to prevent duplicate triggers
@@ -159,9 +159,9 @@ class SpinampAudioEngine {
               this.autoResumeRetryTimeout = null;
             }
 
-            // Retry immediately if backoff window (300ms) has passed, or schedule a retry
+            // Retry if backoff window (600ms) has passed, or schedule a single retry
             const timeSinceLastAttempt = now - this.lastAutoResumeAttemptTime;
-            if (timeSinceLastAttempt >= 300) {
+            if (timeSinceLastAttempt >= 600) {
               this.lastAutoResumeAttemptTime = now;
               this.requestWakeLock();
               this.audioElement.play().then(() => {
@@ -172,7 +172,7 @@ class SpinampAudioEngine {
                 }
               });
             } else {
-              const remainingDelay = Math.max(50, 300 - timeSinceLastAttempt);
+              const remainingDelay = Math.max(100, 600 - timeSinceLastAttempt);
               this.autoResumeRetryTimeout = setTimeout(() => {
                 this.autoResumeRetryTimeout = null;
                 if (
