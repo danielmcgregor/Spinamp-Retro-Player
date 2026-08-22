@@ -16,7 +16,7 @@ export const WelcomeSplash: React.FC<WelcomeSplashProps> = ({
       {/* Spinamp App Logo */}
       <div className="w-24 h-24 bg-neutral-900 border border-neutral-700 rounded-3xl flex items-center justify-center p-1 shadow-2xl mb-6 relative hover:scale-105 transition-transform duration-300 overflow-hidden">
         <img
-          src="/spinamp_logo.jpg?v=2"
+          src="/spinamp_logo.jpg"
           alt="Spinamp App Icon"
           className="w-full h-full object-cover rounded-2xl"
           referrerPolicy="no-referrer"

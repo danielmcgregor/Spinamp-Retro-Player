@@ -36,6 +36,7 @@ class SpinampAudioEngine {
   private lastUnexpectedPauseLogTime: number = 0;
   private pendingAutoResume: boolean = false;
   private lastAutoResumeAttemptTime: number = 0;
+  private autoResumeRetryTimeout: ReturnType<typeof setTimeout> | null = null;
   private lastPlayFailureTrackId: string | null = null;
 
   // React Callbacks for UI updates
@@ -151,6 +152,12 @@ class SpinampAudioEngine {
           // Auto-resume if interrupted by screen-off or transient OS focus loss
           if (this.playerState.isPlaying && this.audioElement && !this.audioElement.error) {
             this.pendingAutoResume = true;
+
+            // Clear any previously pending retry timer to prevent duplicate triggers
+            if (this.autoResumeRetryTimeout) {
+              clearTimeout(this.autoResumeRetryTimeout);
+              this.autoResumeRetryTimeout = null;
+            }
             
             // If the document is hidden, do NOT retry immediately to avoid 10ms abort loops.
             // Wait for visibilitychange to trigger the resume instead.
@@ -161,18 +168,51 @@ class SpinampAudioEngine {
               return; 
             }
 
-            // If visible, retry but enforce a 1000ms minimum backoff between attempts
-            if (now - this.lastAutoResumeAttemptTime > 1000) {
+            // If visible, retry if backoff window (1000ms) has passed, or schedule a timer for the remaining time
+            const timeSinceLastAttempt = now - this.lastAutoResumeAttemptTime;
+            if (timeSinceLastAttempt >= 1000) {
               this.lastAutoResumeAttemptTime = now;
-              this.audioElement.play().catch((err) => {
+              this.audioElement.play().then(() => {
+                this.pendingAutoResume = false;
+              }).catch((err) => {
                 if (Date.now() - this.lastUnexpectedPauseLogTime <= 2000) {
                   console.warn('Auto-resume failed pending visibility change:', err);
                 }
               });
+            } else {
+              // Safety net: document is visible, but we are inside the 1000ms backoff window.
+              // Schedule a single retry for the remaining backoff duration so playback is not lost.
+              const remainingDelay = Math.max(50, 1000 - timeSinceLastAttempt);
+              this.autoResumeRetryTimeout = setTimeout(() => {
+                this.autoResumeRetryTimeout = null;
+                if (
+                  this.pendingAutoResume &&
+                  this.playerState.isPlaying &&
+                  this.audioElement &&
+                  this.audioElement.paused &&
+                  !this.expectedPauseRef &&
+                  !this.audioElement.error &&
+                  (typeof document === 'undefined' || !document.hidden)
+                ) {
+                  this.lastAutoResumeAttemptTime = Date.now();
+                  this.audioElement.play().then(() => {
+                    this.pendingAutoResume = false;
+                  }).catch((err) => {
+                    if (Date.now() - this.lastUnexpectedPauseLogTime <= 2000) {
+                      console.warn('Deferred auto-resume failed:', err);
+                    }
+                  });
+                }
+              }, remainingDelay);
             }
             return; // Maintain isPlaying state so it auto-resumes when screen lights back up
           }
         }
+        if (this.autoResumeRetryTimeout) {
+          clearTimeout(this.autoResumeRetryTimeout);
+          this.autoResumeRetryTimeout = null;
+        }
+        this.pendingAutoResume = false;
         this.onPlayStateChange(false);
       });
       this.audioElement.addEventListener('ended', () => this.onTrackEnded());
@@ -187,6 +227,10 @@ class SpinampAudioEngine {
       // Global visibility / pageshow / focus listener to ensure playback survives screen dark / sleep
       const handleBackgroundResume = () => {
         if (this.playerState.isPlaying || this.pendingAutoResume) {
+          if (this.autoResumeRetryTimeout) {
+            clearTimeout(this.autoResumeRetryTimeout);
+            this.autoResumeRetryTimeout = null;
+          }
           this.ensureContext();
           this.requestWakeLock();
           if (this.audioElement && this.audioElement.paused && !this.expectedPauseRef) {
@@ -615,6 +659,10 @@ class SpinampAudioEngine {
 
   public play(): Promise<void> {
     this.ensureContext();
+    if (this.autoResumeRetryTimeout) {
+      clearTimeout(this.autoResumeRetryTimeout);
+      this.autoResumeRetryTimeout = null;
+    }
     if (!this.currentTrack) return Promise.resolve();
 
     if (this.isSynthPlaying) {
@@ -752,6 +800,11 @@ class SpinampAudioEngine {
   }
 
   public pause() {
+    this.pendingAutoResume = false;
+    if (this.autoResumeRetryTimeout) {
+      clearTimeout(this.autoResumeRetryTimeout);
+      this.autoResumeRetryTimeout = null;
+    }
     if (this.cdSkipIntervalId) {
       clearInterval(this.cdSkipIntervalId);
       this.cdSkipIntervalId = null;
@@ -860,6 +913,11 @@ class SpinampAudioEngine {
   }
 
   public stop() {
+    this.pendingAutoResume = false;
+    if (this.autoResumeRetryTimeout) {
+      clearTimeout(this.autoResumeRetryTimeout);
+      this.autoResumeRetryTimeout = null;
+    }
     this.stopTrackingTime();
     if (this.spinTimer) {
       clearInterval(this.spinTimer);
@@ -1393,7 +1451,7 @@ class SpinampAudioEngine {
       } else {
         // Fallback: use the app logo (loaded from assets, always available offline)
         artworkList.push(
-          { src: './spinamp_logo.jpg', sizes: '1024x1024', type: 'image/jpeg' }
+          { src: '/spinamp_logo.jpg', sizes: '1024x1024', type: 'image/jpeg' }
         );
       }
 

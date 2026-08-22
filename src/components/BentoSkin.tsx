@@ -292,7 +292,7 @@ export const BentoSkin = React.memo(({
             <div className="flex items-center gap-2">
               {/* Spinamp App Logo */}
               <img
-                src="/spinamp_logo.jpg?v=2"
+                src="/spinamp_logo.jpg"
                 alt="Spinamp Logo"
                 className="w-[28px] h-[28px] rounded-lg object-cover border border-neutral-700 shadow-sm shrink-0"
                 referrerPolicy="no-referrer"
@@ -791,7 +791,7 @@ export const BentoSkin = React.memo(({
         <div className="flex items-center gap-2">
           {/* Spinamp App Logo */}
           <img
-            src="/spinamp_logo.jpg?v=2"
+            src="/spinamp_logo.jpg"
             alt="Spinamp Logo"
             className="w-[32px] h-[32px] rounded-lg object-cover border border-neutral-700 shadow-sm shrink-0"
             referrerPolicy="no-referrer"

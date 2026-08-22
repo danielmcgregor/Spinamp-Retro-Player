@@ -201,6 +201,19 @@ export default function App() {
     type: 'tapToPlay' | 'reselectFile' | 'info';
   } | null>(null);
 
+  // Storage Quota Error state
+  const [playlistQuotaError, setPlaylistQuotaError] = useState(false);
+
+  useEffect(() => {
+    const handleQuotaError = (e: any) => {
+      if (e.detail?.key === 'spinamp_playlist_meta') {
+        setPlaylistQuotaError(true);
+      }
+    };
+    window.addEventListener('spinamp_storage_quota_exceeded', handleQuotaError);
+    return () => window.removeEventListener('spinamp_storage_quota_exceeded', handleQuotaError);
+  }, []);
+
   // Sync state changes to localStorage
   useEffect(() => {
     safeSetItem('spinamp_skin_type', skin);
@@ -815,28 +828,29 @@ export default function App() {
     if (!isPowerOnRef.current) {
       setIsPowerOn(true);
     }
-    // Increment play count upon playback start
-    if (activeTrack && !activePlayerState.isPlaying) {
-      setTracks((prev) => {
-        const next = prev.map((t) =>
-          t.id === activeTrack.id ? { ...t, playCount: t.playCount + 1 } : t
-        );
-        saveStatsToStorage(next);
-        return next;
-      });
-
-      // Add to playlist played history list
-      setPlayHistory((prev) => {
-        const next = [activeTrack.id, ...prev.filter((id) => id !== activeTrack.id)];
-        return next.slice(0, 50); // limit 50 entries
-      });
-    }
 
     if (activeTrack) {
       spinampAudio.setTrack(activeTrack);
     }
 
-    return spinampAudio.play();
+    return spinampAudio.play().then(() => {
+      // Increment play count upon successful playback start
+      if (activeTrack && !activePlayerState.isPlaying) {
+        setTracks((prev) => {
+          const next = prev.map((t) =>
+            t.id === activeTrack.id ? { ...t, playCount: t.playCount + 1 } : t
+          );
+          saveStatsToStorage(next);
+          return next;
+        });
+
+        // Add to playlist played history list
+        setPlayHistory((prev) => {
+          const next = [activeTrack.id, ...prev.filter((id) => id !== activeTrack.id)];
+          return next.slice(0, 50); // limit 50 entries
+        });
+      }
+    });
   }, [saveStatsToStorage, handleReimportTrack]);
 
   const handlePause = useCallback(() => {
@@ -1339,6 +1353,22 @@ export default function App() {
     safeRemoveItem('spinamp_retro_stats');
     safeRemoveItem('spinamp_has_launched_before');
     safeRemoveItem('spinamp_playlist_meta');
+    
+    // Additional keys for full factory reset
+    safeRemoveItem('spinamp_skin_type');
+    safeRemoveItem('spinamp_last_track_id');
+    safeRemoveItem('spinamp_vis_mode');
+    safeRemoveItem('spinamp_time_display_mode');
+    safeRemoveItem('spinamp_custom_skin');
+    safeRemoveItem('spinamp_player_volume');
+    safeRemoveItem('spinamp_player_is_muted');
+    safeRemoveItem('spinamp_player_shuffle');
+    safeRemoveItem('spinamp_player_repeat');
+    safeRemoveItem('spinamp_playback_rate');
+    safeRemoveItem('spinamp_bass_boost');
+    safeRemoveItem('spinamp_eq_is_on');
+    safeRemoveItem('spinamp_eq_preamp');
+    safeRemoveItem('spinamp_eq_bands');
 
     // 2. Roll back state variables to default factory settings
     setSkinColor('vespa-gold');
@@ -1358,8 +1388,24 @@ export default function App() {
     setIsFullscreenVisualizer(false);
     setTimeDisplayMode('elapsed');
 
+    setCustomSkin({
+      name: 'My Custom Skin',
+      bg: '#12131c',
+      bgAlt: '#1a1b26',
+      panel: '#0d0d14',
+      border: '#ff9000',
+      accent: '#ff9000',
+      text: '#ff9000',
+      texture: 'none',
+      glow: 'subtle',
+      bezel: 'bento'
+    });
+
     // 3. Clear/set audio context defaults
     spinampAudio.setVolume(0.3);
+    spinampAudio.setShuffle(false);
+    spinampAudio.setRepeat('none');
+    spinampAudio.setMute(false);
     spinampAudio.stop();
     if (defaultTracks[0]) {
       spinampAudio.setTrack(defaultTracks[0]);
@@ -1449,6 +1495,24 @@ export default function App() {
         />
       ) : (
         <div id="active-applet-drawer" className={`flex-1 flex flex-col min-h-0 min-w-0 screen-${screenAppearance} font-preset-${screenFont}`}>
+          {playlistQuotaError && (
+            <div
+              id="playlist-quota-error-banner"
+              className="bg-red-500/20 border-b border-red-500/50 text-red-200 px-3 py-2 text-xs font-mono flex items-center justify-between gap-3 z-50 shrink-0 shadow-md animate-fade-in"
+            >
+              <div className="flex items-center gap-2 truncate min-w-0">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0 animate-pulse" />
+                <span className="truncate">Playlist too large to save locally. Remove tracks or clear cached artwork.</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPlaylistQuotaError(false)}
+                className="text-red-400 hover:text-red-300 p-1 rounded transition shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
           {userActionNotice && (
             <div
               id="user-action-notice-banner"

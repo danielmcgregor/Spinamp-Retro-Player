@@ -311,6 +311,11 @@ export const Playlist = React.memo<PlaylistProps>(({
   }, []);
 
   const handleTouchStart = useCallback((e: React.TouchEvent, idx: number) => {
+    // Disable touch reorder when search filter is active.
+    // Changing order of a filtered list maps to wrong indices on the full list.
+    // Mouse drag-and-drop uses track IDs, so it remains safe to use.
+    if (searchQuery.trim().length > 0) return;
+
     touchActiveRef.current = idx;
     setTouchActiveIdx(idx);
 
@@ -325,7 +330,7 @@ export const Playlist = React.memo<PlaylistProps>(({
           : null;
       })
       .filter((x): x is { idx: number; top: number; bottom: number } => x !== null);
-  }, []);
+  }, [searchQuery]);
 
   const handleShiftTrack = (trackId: string, direction: 'up' | 'down') => {
     const idx = tracks.findIndex((t) => t.id === trackId);
