@@ -473,8 +473,10 @@ class SpinampAudioEngine {
 
   private onTrackEnded() {
     this.stopTrackingTime();
-    this.playerState.isPlaying = false;
     this.playerState.currentTime = 0;
+    if (this.trackEndedCallbacks.length === 0) {
+      this.playerState.isPlaying = false;
+    }
     this.broadcastState();
     this.trackEndedCallbacks.forEach((cb) => cb());
   }
