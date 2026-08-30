@@ -15,6 +15,7 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     private AudioManager audioManager;
     private AudioFocusRequest audioFocusRequest;
+    private boolean isServiceStarted = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -44,7 +45,8 @@ public class MainActivity extends BridgeActivity {
         startPlaybackService();
     }
 
-    public void startPlaybackService() {
+    public synchronized void startPlaybackService() {
+        if (isServiceStarted) return;
         try {
             Intent intent = new Intent(this, MediaPlaybackService.class);
             intent.setAction(MediaPlaybackService.ACTION_START);
@@ -53,19 +55,21 @@ public class MainActivity extends BridgeActivity {
             } else {
                 startService(intent);
             }
+            isServiceStarted = true;
         } catch (Exception e) {
-            e.printStackTrace();
+            // Foreground service start blocked by background limits
         }
     }
 
-    public void stopPlaybackService() {
+    public synchronized void stopPlaybackService() {
         try {
             Intent intent = new Intent(this, MediaPlaybackService.class);
             intent.setAction(MediaPlaybackService.ACTION_STOP);
             startService(intent);
         } catch (Exception e) {
-            e.printStackTrace();
+            // Gracefully handle stop service error
         }
+        isServiceStarted = false;
     }
 
     private void requestNativeAudioFocus() {
@@ -111,7 +115,7 @@ public class MainActivity extends BridgeActivity {
 
         @JavascriptInterface
         public void updatePlaybackState(boolean isPlaying, String title, String artist, long positionMs, long durationMs) {
-            if (isPlaying) {
+            if (isPlaying && !isServiceStarted) {
                 MainActivity.this.startPlaybackService();
             }
         }
