@@ -412,7 +412,7 @@ export default function App() {
 
   const handlePrevTrackRef = useRef<() => void>(() => {});
   const handleNextTrackRef = useRef<() => void>(() => {});
-  const handlePlayRef = useRef<() => void>(() => {});
+  const handlePlayRef = useRef<(targetTrackOverride?: Track) => void>((_t?: Track) => {});
   const handlePauseRef = useRef<() => void>(() => {});
   const handleStopRef = useRef<() => void>(() => {});
   const handleVolumeChangeRef = useRef<(volume: number) => void>(() => {});
@@ -811,8 +811,8 @@ export default function App() {
     }, 10);
   }, []);
 
-  const handlePlay = useCallback(() => {
-    const activeTrack = currentTrackRef.current;
+  const handlePlay = useCallback((targetTrackOverride?: Track) => {
+    const activeTrack = targetTrackOverride || currentTrackRef.current;
     
     const activePlayerState = playerStateRef.current;
 
@@ -884,13 +884,14 @@ export default function App() {
   }, []);
 
   const handleSelectTrack = useCallback((track: Track) => {
+    currentTrackRef.current = track;
     setCurrentTrack(track);
     spinampAudio.setTrack(track);
     
     // Auto start play only if loaded
     const isNotLoaded = track.id.startsWith('local_') && !track.file;
     if (!isNotLoaded) {
-      handlePlayRef.current();
+      handlePlayRef.current(track);
     }
   }, []);
 
