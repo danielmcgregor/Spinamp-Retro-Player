@@ -1,12 +1,14 @@
 package com.spinamp.retroplayer;
 
 import android.content.Context;
+import android.content.Intent;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import com.getcapacitor.BridgeActivity;
 
@@ -25,16 +27,45 @@ public class MainActivity extends BridgeActivity {
         if (this.bridge != null && this.bridge.getWebView() != null) {
             WebSettings settings = this.bridge.getWebView().getSettings();
             settings.setMediaPlaybackRequiresUserGesture(false);
+
+            // Inject native AndroidMediaBridge JS interface into WebView
+            this.bridge.getWebView().addJavascriptInterface(new AndroidMediaBridge(), "AndroidMediaBridge");
         }
 
-        // Acquire persistent Android Audio Focus for background media playback
+        // Acquire persistent Android Audio Focus and start foreground service
         requestNativeAudioFocus();
+        startPlaybackService();
     }
 
     @Override
     public void onResume() {
         super.onResume();
         requestNativeAudioFocus();
+        startPlaybackService();
+    }
+
+    public void startPlaybackService() {
+        try {
+            Intent intent = new Intent(this, MediaPlaybackService.class);
+            intent.setAction(MediaPlaybackService.ACTION_START);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent);
+            } else {
+                startService(intent);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void stopPlaybackService() {
+        try {
+            Intent intent = new Intent(this, MediaPlaybackService.class);
+            intent.setAction(MediaPlaybackService.ACTION_STOP);
+            startService(intent);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private void requestNativeAudioFocus() {
@@ -51,9 +82,7 @@ public class MainActivity extends BridgeActivity {
                 audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
                         .setAudioAttributes(playbackAttributes)
                         .setAcceptsDelayedFocusGain(true)
-                        .setOnAudioFocusChangeListener(focusChange -> {
-                            // Focus listener callback
-                        })
+                        .setOnAudioFocusChangeListener(focusChange -> {})
                         .build();
 
                 audioManager.requestAudioFocus(audioFocusRequest);
@@ -66,6 +95,25 @@ public class MainActivity extends BridgeActivity {
             }
         } catch (Exception e) {
             // Gracefully handle focus request fallback
+        }
+    }
+
+    public class AndroidMediaBridge {
+        @JavascriptInterface
+        public void startPlaybackService() {
+            MainActivity.this.startPlaybackService();
+        }
+
+        @JavascriptInterface
+        public void stopPlaybackService() {
+            MainActivity.this.stopPlaybackService();
+        }
+
+        @JavascriptInterface
+        public void updatePlaybackState(boolean isPlaying, String title, String artist, long positionMs, long durationMs) {
+            if (isPlaying) {
+                MainActivity.this.startPlaybackService();
+            }
         }
     }
 }
