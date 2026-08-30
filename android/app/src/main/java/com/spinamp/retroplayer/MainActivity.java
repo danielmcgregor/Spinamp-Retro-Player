@@ -72,6 +72,19 @@ public class MainActivity extends BridgeActivity {
         isServiceStarted = false;
     }
 
+    public void updateServiceNotification(String title, String artist, boolean isPlaying) {
+        try {
+            Intent intent = new Intent(this, MediaPlaybackService.class);
+            intent.setAction(MediaPlaybackService.ACTION_UPDATE);
+            intent.putExtra("title", title);
+            intent.putExtra("artist", artist);
+            intent.putExtra("isPlaying", isPlaying);
+            startService(intent);
+        } catch (Exception e) {
+            // Gracefully handle service update
+        }
+    }
+
     private void requestNativeAudioFocus() {
         try {
             audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
@@ -118,6 +131,11 @@ public class MainActivity extends BridgeActivity {
             if (isPlaying && !isServiceStarted) {
                 MainActivity.this.startPlaybackService();
             }
+            MainActivity.this.updateServiceNotification(
+                title != null && !title.trim().isEmpty() ? title : "Spinamp Retro Player",
+                artist != null && !artist.trim().isEmpty() ? artist : "Playing audio in background",
+                isPlaying
+            );
         }
     }
 }

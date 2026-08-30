@@ -17,6 +17,11 @@ public class MediaPlaybackService extends Service {
 
     public static final String ACTION_START = "ACTION_START";
     public static final String ACTION_STOP = "ACTION_STOP";
+    public static final String ACTION_UPDATE = "ACTION_UPDATE";
+
+    private String currentTitle = "Spinamp Retro Player";
+    private String currentArtist = "Playing audio in background";
+    private boolean currentIsPlaying = true;
 
     @Override
     public void onCreate() {
@@ -26,13 +31,26 @@ public class MediaPlaybackService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && ACTION_STOP.equals(intent.getAction())) {
-            stopForeground(true);
-            stopSelf();
-            return START_NOT_STICKY;
+        if (intent != null) {
+            String action = intent.getAction();
+            if (ACTION_STOP.equals(action)) {
+                stopForeground(true);
+                stopSelf();
+                return START_NOT_STICKY;
+            } else if (ACTION_UPDATE.equals(action)) {
+                String title = intent.getStringExtra("title");
+                String artist = intent.getStringExtra("artist");
+                if (title != null && !title.trim().isEmpty()) {
+                    currentTitle = title;
+                }
+                if (artist != null && !artist.trim().isEmpty()) {
+                    currentArtist = artist;
+                }
+                currentIsPlaying = intent.getBooleanExtra("isPlaying", true);
+            }
         }
 
-        Notification notification = createNotification();
+        Notification notification = createNotification(currentTitle, currentArtist, currentIsPlaying);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
         } else {
@@ -63,19 +81,20 @@ public class MediaPlaybackService extends Service {
         }
     }
 
-    private Notification createNotification() {
+    private Notification createNotification(String title, String artist, boolean isPlaying) {
         Intent intent = new Intent(this, MainActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(
                 this, 0, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
         );
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("Spinamp Retro Player")
-                .setContentText("Playing audio in background")
+                .setContentTitle(title)
+                .setContentText(artist)
                 .setSmallIcon(android.R.drawable.ic_media_play)
-                .setOngoing(true)
+                .setOngoing(isPlaying)
                 .setContentIntent(pendingIntent)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .build();
     }
 }
