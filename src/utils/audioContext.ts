@@ -648,6 +648,7 @@ class SpinampAudioEngine {
   }
 
   public play(): Promise<void> {
+    this.expectedPauseRef = false;
     this.ensureContext();
     if (this.autoResumeRetryTimeout) {
       clearTimeout(this.autoResumeRetryTimeout);

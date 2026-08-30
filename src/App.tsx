@@ -890,9 +890,7 @@ export default function App() {
     // Auto start play only if loaded
     const isNotLoaded = track.id.startsWith('local_') && !track.file;
     if (!isNotLoaded) {
-      setTimeout(() => {
-        handlePlayRef.current();
-      }, 100);
+      handlePlayRef.current();
     }
   }, []);
 
