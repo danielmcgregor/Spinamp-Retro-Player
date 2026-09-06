@@ -538,7 +538,14 @@ class SpinampAudioEngine {
     }
 
     this.expectedPauseRef = true;
-    this.stop();
+    
+    // Explicitly pause and unload previous track media source to prevent old track replay
+    if (this.audioElement) {
+      this.audioElement.pause();
+      this.audioElement.removeAttribute('src');
+      this.audioElement.load();
+    }
+    this.stopTrackingTime();
 
     // Defer previous file URL revocation to prevent aborting active audio decoders
     if (this.currentFileUrl) {
@@ -550,7 +557,6 @@ class SpinampAudioEngine {
     }
 
     this.lastSetFile = track.file || null;
-
     this.currentTrack = track;
     this.isSynthPlaying = track.id === 'synth';
 
