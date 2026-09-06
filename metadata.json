@@ -1,1 +1,6 @@
-{"name":"Spinamp Retro Player","description":"An interactive Spinamp 666.5 replica optimized for mobile and desktop viewports, featuring real Web Audio visualizers, Bento \u0026 Classic skins, a fully functional 10-band equalizer, playlist, and local file playback.","requestFramePermissions":[],"majorCapabilities":["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]}
+{
+  "name": "Spinamp Retro Player",
+  "description": "An interactive Spinamp 666.5 replica optimized for mobile and desktop viewports, featuring real Web Audio visualizers, Bento & Classic skins, a fully functional 10-band equalizer, playlist, and local file playback.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

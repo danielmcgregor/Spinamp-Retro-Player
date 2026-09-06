@@ -231,12 +231,12 @@ class SynthEngine {
   private scheduler() {
     if (!this.isRunning || !this.audioCtx) return;
     
-    // Look-ahead schedule
-    while (this.nextNoteTime < this.audioCtx.currentTime + 0.1) {
+    // Look-ahead schedule with 0.5s window to handle background CPU timer throttling
+    while (this.nextNoteTime < this.audioCtx.currentTime + 0.5) {
       this.scheduleNextStep();
     }
     
-    this.timerId = setTimeout(() => this.scheduler(), 25);
+    this.timerId = setTimeout(() => this.scheduler(), 50);
   }
 }
 

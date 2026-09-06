@@ -6,17 +6,3 @@ coverage/
 *.log
 .env*
 !.env.example
-.antigravity/
-
-# Temporary patch scripts
-patch_*
-fix_fire.cjs
-test_diff.*
-
-# Android build & local settings
-android/app/build/
-android/.gradle/
-android/local.properties
-android/captures/
-android/.idea/
-*.apk

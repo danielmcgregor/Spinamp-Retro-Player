@@ -38,6 +38,10 @@ class SpinampAudioEngine {
   private lastAutoResumeAttemptTime: number = 0;
   private autoResumeRetryTimeout: ReturnType<typeof setTimeout> | null = null;
   private lastPlayFailureTrackId: string | null = null;
+  private lastContextResumeAttemptTime: number = 0;
+  private lastMediaSessionSyncTime: number = 0;
+  private lastMediaSessionPlaying: boolean = false;
+  private lastMediaSessionPosition: number = -1;
 
   // React Callbacks for UI updates
   private stateChangeCallbacks: ((state: PlayerState) => void)[] = [];
@@ -137,65 +141,29 @@ class SpinampAudioEngine {
       this.audioElement.addEventListener('play', () => this.onPlayStateChange(true));
       this.audioElement.addEventListener('pause', () => {
         if (!this.expectedPauseRef) {
-          const now = Date.now();
-          if (now - this.lastUnexpectedPauseLogTime > 2000) {
-            console.warn(
-              '[Spinamp Diagnostic] Audio element paused UNEXPECTEDLY at',
-              new Date().toISOString(),
-              'currentTime:', this.audioElement?.currentTime,
-              'app foreground:', (window as any).AndroidMediaBridge ? 'native bridge present' : 'no bridge',
-              'document.hidden:', document.hidden
-            );
-            this.lastUnexpectedPauseLogTime = now;
+          // If document is hidden (screen locked/off or background tab),
+          // maintain isPlaying state and let the OS handle background audio naturally.
+          if (typeof document !== 'undefined' && document.hidden) {
+            this.pendingAutoResume = true;
+            return;
           }
 
-          // Auto-resume if interrupted by screen-off, OS focus loss, or backgrounding
-          if (this.playerState.isPlaying && this.audioElement && this.audioElement.paused && !this.audioElement.error && !this.expectedPauseRef) {
+          // If document is visible, perform a clean debounced auto-resume check
+          if (this.playerState.isPlaying && this.audioElement && !this.audioElement.error) {
             this.pendingAutoResume = true;
-
-            // Clear any previously pending retry timer to prevent duplicate triggers
             if (this.autoResumeRetryTimeout) {
               clearTimeout(this.autoResumeRetryTimeout);
               this.autoResumeRetryTimeout = null;
             }
-
-            // Retry if backoff window (600ms) has passed, or schedule a single retry
+            const now = Date.now();
             const timeSinceLastAttempt = now - this.lastAutoResumeAttemptTime;
-            if (timeSinceLastAttempt >= 600) {
+            if (timeSinceLastAttempt >= 1500) {
               this.lastAutoResumeAttemptTime = now;
-              this.requestWakeLock();
               this.audioElement.play().then(() => {
                 this.pendingAutoResume = false;
-              }).catch((err) => {
-                if (Date.now() - this.lastUnexpectedPauseLogTime <= 2000) {
-                  console.warn('Background auto-resume attempt failed:', err);
-                }
-              });
-            } else {
-              const remainingDelay = Math.max(100, 600 - timeSinceLastAttempt);
-              this.autoResumeRetryTimeout = setTimeout(() => {
-                this.autoResumeRetryTimeout = null;
-                if (
-                  this.pendingAutoResume &&
-                  this.playerState.isPlaying &&
-                  this.audioElement &&
-                  this.audioElement.paused &&
-                  !this.expectedPauseRef &&
-                  !this.audioElement.error
-                ) {
-                  this.lastAutoResumeAttemptTime = Date.now();
-                  this.requestWakeLock();
-                  this.audioElement.play().then(() => {
-                    this.pendingAutoResume = false;
-                  }).catch((err) => {
-                    if (Date.now() - this.lastUnexpectedPauseLogTime <= 2000) {
-                      console.warn('Deferred background auto-resume failed:', err);
-                    }
-                  });
-                }
-              }, remainingDelay);
+              }).catch(() => {});
             }
-            return; // Maintain isPlaying = true so audio continues seamlessly in screen-off mode
+            return;
           }
         }
         if (this.autoResumeRetryTimeout) {
@@ -216,6 +184,11 @@ class SpinampAudioEngine {
 
       // Global visibility / pageshow / focus listener to ensure playback survives screen dark / sleep
       const handleBackgroundResume = () => {
+        // ONLY execute when coming back to visible foreground!
+        if (typeof document !== 'undefined' && document.hidden) {
+          return;
+        }
+
         if (this.playerState.isPlaying || this.pendingAutoResume) {
           if (this.autoResumeRetryTimeout) {
             clearTimeout(this.autoResumeRetryTimeout);
@@ -232,7 +205,8 @@ class SpinampAudioEngine {
         }
       };
 
-      window.addEventListener('visibilitychange', handleBackgroundResume);
+      // visibilitychange is dispatched on document, not reliably on window.
+      document.addEventListener('visibilitychange', handleBackgroundResume);
       window.addEventListener('pageshow', handleBackgroundResume);
       window.addEventListener('focus', handleBackgroundResume);
       window.addEventListener('spinamp-visibility-changed', handleBackgroundResume);
@@ -283,10 +257,21 @@ class SpinampAudioEngine {
         console.warn("AudioContext is not supported in this browser");
         return;
       }
-      this.audioCtx = new AudioContextClass();
+      // Use latencyHint: 'playback' to ensure larger buffers resilient to CPU power throttling in background/screen-off
+      try {
+        this.audioCtx = new AudioContextClass({ latencyHint: 'playback' });
+      } catch {
+        this.audioCtx = new AudioContextClass();
+      }
+
       this.audioCtx.onstatechange = () => {
         if (this.audioCtx?.state === 'suspended' && this.playerState.isPlaying) {
-          this.audioCtx.resume().catch(() => {});
+          const now = Date.now();
+          // Never resume in a tight loop and never when document is hidden (letting OS manage power)
+          if (typeof document !== 'undefined' && !document.hidden && now - this.lastContextResumeAttemptTime > 2000) {
+            this.lastContextResumeAttemptTime = now;
+            this.audioCtx.resume().catch(() => {});
+          }
         }
       };
     } catch (e) {
@@ -439,8 +424,8 @@ class SpinampAudioEngine {
           this.wakeLockSentinel = await (navigator as any).wakeLock.request('screen');
           this.wakeLockSentinel.addEventListener('release', () => {
             this.wakeLockSentinel = null;
-            if (this.playerState.isPlaying) {
-              setTimeout(() => this.requestWakeLock(), 300);
+            if (this.playerState.isPlaying && typeof document !== 'undefined' && document.visibilityState === 'visible') {
+              setTimeout(() => this.requestWakeLock(), 500);
             }
           });
         }
@@ -473,10 +458,8 @@ class SpinampAudioEngine {
 
   private onTrackEnded() {
     this.stopTrackingTime();
+    this.playerState.isPlaying = false;
     this.playerState.currentTime = 0;
-    if (this.trackEndedCallbacks.length === 0) {
-      this.playerState.isPlaying = false;
-    }
     this.broadcastState();
     this.trackEndedCallbacks.forEach((cb) => cb());
   }
@@ -509,7 +492,9 @@ class SpinampAudioEngine {
   // --- AUDIO API CONTROLS ---
 
   public getAnalyser(): AnalyserNode | null {
-    this.ensureContext();
+    if (!this.audioCtx) {
+      this.ensureContext();
+    }
     return this.analyserNode;
   }
 
@@ -520,9 +505,13 @@ class SpinampAudioEngine {
         this.initAudioContext();
       }
       if (this.audioCtx && this.audioCtx.state === 'suspended') {
-        this.audioCtx.resume().catch((err) => {
-          console.warn('Failed to resume AudioContext:', err);
-        });
+        const now = Date.now();
+        if (now - this.lastContextResumeAttemptTime > 1500) {
+          this.lastContextResumeAttemptTime = now;
+          this.audioCtx.resume().catch((err) => {
+            console.warn('Failed to resume AudioContext:', err);
+          });
+        }
       }
     } catch (e) {
       console.warn('ensureContext error caught:', e);
@@ -579,6 +568,16 @@ class SpinampAudioEngine {
         this.audioElement.src = track.url;
         this.audioElement.load();
       }
+    } else if (this.audioElement) {
+      // A persisted local track may no longer have an attached File after a reload.
+      // Clear the previous media source so pressing Play can never replay the
+      // previously selected track by accident while the UI asks for re-linking.
+      this.audioElement.pause();
+      this.audioElement.removeAttribute('src');
+      this.audioElement.load();
+      this.playerState.currentTime = 0;
+      this.playerState.duration = Number.isFinite(track.duration) ? track.duration : 0;
+      this.broadcastState();
     }
     
     setTimeout(() => {
@@ -650,7 +649,6 @@ class SpinampAudioEngine {
   }
 
   public play(): Promise<void> {
-    this.expectedPauseRef = false;
     this.ensureContext();
     if (this.autoResumeRetryTimeout) {
       clearTimeout(this.autoResumeRetryTimeout);
@@ -1465,16 +1463,31 @@ class SpinampAudioEngine {
     }
   }
 
-  private updateMediaSession() {
+  private updateMediaSession(force: boolean = false) {
+    const isPlaying = this.playerState.isPlaying;
+    const position = this.playerState.currentTime;
+    const now = Date.now();
+
+    const stateChanged = isPlaying !== this.lastMediaSessionPlaying;
+    const timeDrifted = Math.abs(position - this.lastMediaSessionPosition) > 2;
+    const intervalElapsed = now - this.lastMediaSessionSyncTime >= 2000;
+
+    if (!force && !stateChanged && !timeDrifted && !intervalElapsed) {
+      return;
+    }
+
+    this.lastMediaSessionSyncTime = now;
+    this.lastMediaSessionPlaying = isPlaying;
+    this.lastMediaSessionPosition = position;
+
     // Web MediaSession API updates — guarded by its own availability check, 
     // as before
     if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
       try {
-        navigator.mediaSession.playbackState = this.playerState.isPlaying ? 'playing' : 'paused';
+        navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
 
         if ('setPositionState' in navigator.mediaSession) {
           const duration = this.playerState.duration;
-          const position = this.playerState.currentTime;
           const rate = this.getPlaybackRate();
 
           if (Number.isFinite(duration) && duration >= 0 &&
@@ -1493,16 +1506,15 @@ class SpinampAudioEngine {
     }
 
     // Native Android bridge call — COMPLETELY INDEPENDENT of whether the Web 
-    // MediaSession API exists or works. This must run every time this 
-    // function is called, regardless of the block above.
+    // MediaSession API exists or works.
     if (isAndroidMediaBridgeAvailable()) {
       try {
         const track = this.currentTrack;
         const durationMs = Number.isFinite(this.playerState.duration) ? Math.round(this.playerState.duration * 1000) : 0;
-        const positionMs = Number.isFinite(this.playerState.currentTime) ? Math.round(this.playerState.currentTime * 1000) : 0;
+        const positionMs = Number.isFinite(position) ? Math.round(position * 1000) : 0;
 
         (window as any).AndroidMediaBridge.updatePlaybackState(
-          this.playerState.isPlaying,
+          isPlaying,
           track?.title || 'Spinamp',
           track?.artist || '',
           positionMs,

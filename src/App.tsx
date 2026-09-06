@@ -412,7 +412,7 @@ export default function App() {
 
   const handlePrevTrackRef = useRef<() => void>(() => {});
   const handleNextTrackRef = useRef<() => void>(() => {});
-  const handlePlayRef = useRef<(targetTrackOverride?: Track) => void>((_t?: Track) => {});
+  const handlePlayRef = useRef<() => void>(() => {});
   const handlePauseRef = useRef<() => void>(() => {});
   const handleStopRef = useRef<() => void>(() => {});
   const handleVolumeChangeRef = useRef<(volume: number) => void>(() => {});
@@ -431,7 +431,10 @@ export default function App() {
     const handleBeforeUnload = () => {
       if (playlistSaveTimerRef.current) {
         clearTimeout(playlistSaveTimerRef.current);
-        const persistableTracks = tracksRef.current.map(({ file, ...rest }) => rest);
+        const persistableTracks = tracksRef.current.map(({ file, coverUrl, ...rest }) => ({
+          ...rest,
+          coverUrl: coverUrl && coverUrl.startsWith('blob:') ? undefined : coverUrl,
+        }));
         safeSetItem('spinamp_playlist_meta', JSON.stringify(persistableTracks));
       }
     };
@@ -811,8 +814,8 @@ export default function App() {
     }, 10);
   }, []);
 
-  const handlePlay = useCallback((targetTrackOverride?: Track) => {
-    const activeTrack = targetTrackOverride || currentTrackRef.current;
+  const handlePlay = useCallback(() => {
+    const activeTrack = currentTrackRef.current;
     
     const activePlayerState = playerStateRef.current;
 
@@ -834,8 +837,9 @@ export default function App() {
     }
 
     return spinampAudio.play().then(() => {
-      // Increment play count upon successful playback start
-      if (activeTrack && !activePlayerState.isPlaying) {
+      // Only count an actual playback start. The audio engine deliberately
+      // absorbs browser autoplay/media errors so UI callers stay stable.
+      if (activeTrack && !activePlayerState.isPlaying && spinampAudio.isCurrentlyPlaying()) {
         setTracks((prev) => {
           const next = prev.map((t) =>
             t.id === activeTrack.id ? { ...t, playCount: t.playCount + 1 } : t
@@ -884,14 +888,15 @@ export default function App() {
   }, []);
 
   const handleSelectTrack = useCallback((track: Track) => {
-    currentTrackRef.current = track;
     setCurrentTrack(track);
     spinampAudio.setTrack(track);
     
     // Auto start play only if loaded
     const isNotLoaded = track.id.startsWith('local_') && !track.file;
     if (!isNotLoaded) {
-      handlePlayRef.current(track);
+      setTimeout(() => {
+        handlePlayRef.current();
+      }, 100);
     }
   }, []);
 
@@ -923,7 +928,14 @@ export default function App() {
 
     let nextIdx = 0;
     if (activePlayerState.shuffle) {
-      nextIdx = Math.floor(Math.random() * currentTracks.length);
+      if (currentTracks.length > 1 && activeTrack) {
+        const currentIdx = currentTracks.findIndex((t) => t.id === activeTrack.id);
+        // Pick uniformly from every track except the current one.
+        const randomOffset = 1 + Math.floor(Math.random() * (currentTracks.length - 1));
+        nextIdx = currentIdx >= 0 ? (currentIdx + randomOffset) % currentTracks.length : Math.floor(Math.random() * currentTracks.length);
+      } else {
+        nextIdx = 0;
+      }
     } else if (activeTrack) {
       const idx = currentTracks.findIndex((t) => t.id === activeTrack.id);
       nextIdx = (idx + 1) % currentTracks.length;

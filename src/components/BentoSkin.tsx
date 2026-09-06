@@ -1,5 +1,4 @@
 import React, { useState, useCallback } from 'react';
-import spinampLogo from '../assets/logo.png';
 import { Track, PlayerState, VisualizerMode, ScreenAppearance, FontPreset, SkinType } from '../types';
 import { Visualizer } from './Visualizer';
 import { UnifiedTrackScreen } from './UnifiedTrackScreen';
@@ -293,13 +292,10 @@ export const BentoSkin = React.memo(({
             <div className="flex items-center gap-2">
               {/* Spinamp App Logo */}
               <img
-                src={spinampLogo}
+                src="/spinamp_logo.jpg"
                 alt="Spinamp Logo"
                 className="w-[28px] h-[28px] rounded-lg object-cover border border-neutral-700 shadow-sm shrink-0"
                 referrerPolicy="no-referrer"
-                onError={(e) => {
-                  e.currentTarget.src = '/spinamp_logo.jpg';
-                }}
               />
               <span className="text-[11.5px] font-extrabold text-amber-500 uppercase tracking-widest leading-none">SPINAMP RETRO PLAYER</span>
               
@@ -795,13 +791,10 @@ export const BentoSkin = React.memo(({
         <div className="flex items-center gap-2">
           {/* Spinamp App Logo */}
           <img
-            src={spinampLogo}
+            src="/spinamp_logo.jpg"
             alt="Spinamp Logo"
             className="w-[32px] h-[32px] rounded-lg object-cover border border-neutral-700 shadow-sm shrink-0"
             referrerPolicy="no-referrer"
-            onError={(e) => {
-              e.currentTarget.src = '/spinamp_logo.jpg';
-            }}
           />
           <span className="text-[12px] font-extrabold text-amber-500 uppercase tracking-widest leading-none hidden md:inline">SPINAMP RETRO PLAYER</span>
           
