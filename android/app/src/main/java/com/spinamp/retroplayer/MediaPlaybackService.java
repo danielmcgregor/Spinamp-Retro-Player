@@ -5,6 +5,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
@@ -22,6 +23,7 @@ public class MediaPlaybackService extends Service {
     private String currentTitle = "Spinamp Retro Player";
     private String currentArtist = "Playing audio in background";
     private boolean currentIsPlaying = true;
+    private boolean isForeground = false;
 
     @Override
     public void onCreate() {
@@ -34,7 +36,10 @@ public class MediaPlaybackService extends Service {
         if (intent != null) {
             String action = intent.getAction();
             if (ACTION_STOP.equals(action)) {
-                stopForeground(true);
+                try {
+                    stopForeground(true);
+                } catch (Exception ignored) {}
+                isForeground = false;
                 stopSelf();
                 return START_NOT_STICKY;
             } else if (ACTION_UPDATE.equals(action)) {
@@ -51,10 +56,32 @@ public class MediaPlaybackService extends Service {
         }
 
         Notification notification = createNotification(currentTitle, currentArtist, currentIsPlaying);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+
+        if (!isForeground) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+                } else {
+                    startForeground(NOTIFICATION_ID, notification);
+                }
+                isForeground = true;
+            } catch (Exception e) {
+                // Background start restrictions on Android 12+ (ForegroundServiceStartNotAllowedException)
+                // Fall back to posting notification via NotificationManager to avoid process crash
+                if (manager != null) {
+                    try {
+                        manager.notify(NOTIFICATION_ID, notification);
+                    } catch (Exception ignored) {}
+                }
+            }
         } else {
-            startForeground(NOTIFICATION_ID, notification);
+            // Already running in foreground: safely update notification without invoking startForeground again
+            if (manager != null) {
+                try {
+                    manager.notify(NOTIFICATION_ID, notification);
+                } catch (Exception ignored) {}
+            }
         }
 
         return START_STICKY;
