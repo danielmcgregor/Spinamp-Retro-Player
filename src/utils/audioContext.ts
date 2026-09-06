@@ -458,10 +458,15 @@ class SpinampAudioEngine {
 
   private onTrackEnded() {
     this.stopTrackingTime();
-    this.playerState.isPlaying = false;
     this.playerState.currentTime = 0;
-    this.broadcastState();
-    this.trackEndedCallbacks.forEach((cb) => cb());
+
+    if (this.trackEndedCallbacks.length > 0) {
+      // Maintain active playback state during track transition so Android MediaSession / ForegroundService stays active
+      this.trackEndedCallbacks.forEach((cb) => cb());
+    } else {
+      this.playerState.isPlaying = false;
+      this.broadcastState();
+    }
   }
 
   private startTrackingTime() {

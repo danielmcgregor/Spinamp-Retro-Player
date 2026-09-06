@@ -888,15 +888,20 @@ export default function App() {
   }, []);
 
   const handleSelectTrack = useCallback((track: Track) => {
+    const wasActive = playerStateRef.current.isPlaying;
     setCurrentTrack(track);
     spinampAudio.setTrack(track);
     
     // Auto start play only if loaded
     const isNotLoaded = track.id.startsWith('local_') && !track.file;
     if (!isNotLoaded) {
-      setTimeout(() => {
+      if (wasActive) {
         handlePlayRef.current();
-      }, 100);
+      } else {
+        setTimeout(() => {
+          handlePlayRef.current();
+        }, 50);
+      }
     }
   }, []);
 
