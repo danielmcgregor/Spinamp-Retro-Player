@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import logoImg from '../assets/logo.png';
 import { Track, PlayerState, VisualizerMode, ScreenAppearance, FontPreset, SkinType } from '../types';
 import { Visualizer } from './Visualizer';
 import { UnifiedTrackScreen } from './UnifiedTrackScreen';
@@ -292,7 +293,8 @@ export const BentoSkin = React.memo(({
             <div className="flex items-center gap-2">
               {/* Spinamp App Logo */}
               <img
-                src="/spinamp_logo.jpg"
+                src={logoImg}
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/spinamp_logo.jpg'; }}
                 alt="Spinamp Logo"
                 className="w-[28px] h-[28px] rounded-lg object-cover border border-neutral-700 shadow-sm shrink-0"
                 referrerPolicy="no-referrer"
@@ -791,7 +793,8 @@ export const BentoSkin = React.memo(({
         <div className="flex items-center gap-2">
           {/* Spinamp App Logo */}
           <img
-            src="/spinamp_logo.jpg"
+            src={logoImg}
+            onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/spinamp_logo.jpg'; }}
             alt="Spinamp Logo"
             className="w-[32px] h-[32px] rounded-lg object-cover border border-neutral-700 shadow-sm shrink-0"
             referrerPolicy="no-referrer"
