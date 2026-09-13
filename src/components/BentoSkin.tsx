@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import logoImg from '../assets/logo.png';
+import { SpinampLogo } from './SpinampLogo';
 import { Track, PlayerState, VisualizerMode, ScreenAppearance, FontPreset, SkinType } from '../types';
 import { Visualizer } from './Visualizer';
 import { UnifiedTrackScreen } from './UnifiedTrackScreen';
@@ -292,13 +292,7 @@ export const BentoSkin = React.memo(({
           <div id="bento-logo-strip-landscape" className="flex justify-between items-center bg-[#131416] border border-[#2b2d31] p-2 px-3 rounded-md shadow-inner shrink-0 leading-none">
             <div className="flex items-center gap-2">
               {/* Spinamp App Logo */}
-              <img
-                src={logoImg}
-                onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/spinamp_logo.jpg'; }}
-                alt="Spinamp Logo"
-                className="w-[28px] h-[28px] rounded-lg object-cover border border-neutral-700 shadow-sm shrink-0"
-                referrerPolicy="no-referrer"
-              />
+              <SpinampLogo className="w-[28px] h-[28px] rounded-lg" />
               <span className="text-[11.5px] font-extrabold text-amber-500 uppercase tracking-widest leading-none">SPINAMP RETRO PLAYER</span>
               
               {/* SKIN BUTTON CHIP */}
@@ -792,13 +786,7 @@ export const BentoSkin = React.memo(({
       <div id="bento-logo-strip" className="flex justify-between items-center bg-[#131416] border border-[#2b2d31] p-2 px-3 rounded-md shadow-inner shrink-0">
         <div className="flex items-center gap-2">
           {/* Spinamp App Logo */}
-          <img
-            src={logoImg}
-            onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/spinamp_logo.jpg'; }}
-            alt="Spinamp Logo"
-            className="w-[32px] h-[32px] rounded-lg object-cover border border-neutral-700 shadow-sm shrink-0"
-            referrerPolicy="no-referrer"
-          />
+          <SpinampLogo className="w-[32px] h-[32px] rounded-lg" />
           <span className="text-[12px] font-extrabold text-amber-500 uppercase tracking-widest leading-none hidden md:inline">SPINAMP RETRO PLAYER</span>
           
           {/* SKIN BUTTON CHIP */}

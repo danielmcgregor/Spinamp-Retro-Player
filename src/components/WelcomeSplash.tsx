@@ -1,5 +1,5 @@
 import React from 'react';
-import logoImg from '../assets/logo.png';
+import { SpinampLogo } from './SpinampLogo';
 
 interface WelcomeSplashProps {
   onPowerOn: () => void;
@@ -16,13 +16,7 @@ export const WelcomeSplash: React.FC<WelcomeSplashProps> = ({
       
       {/* Spinamp App Logo */}
       <div className="w-24 h-24 bg-neutral-900 border border-neutral-700 rounded-3xl flex items-center justify-center p-1 shadow-2xl mb-6 relative hover:scale-105 transition-transform duration-300 overflow-hidden">
-        <img
-          src={logoImg}
-          onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/spinamp_logo.jpg'; }}
-          alt="Spinamp App Icon"
-          className="w-full h-full object-cover rounded-2xl"
-          referrerPolicy="no-referrer"
-        />
+        <SpinampLogo className="w-full h-full rounded-2xl" />
         <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-[#00ff44] border-2 border-[#090a0f] rounded-full animate-pulse" title="System online" />
       </div>
 
