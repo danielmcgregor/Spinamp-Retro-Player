@@ -42,6 +42,7 @@ class SpinampAudioEngine {
   private lastMediaSessionSyncTime: number = 0;
   private lastMediaSessionPlaying: boolean = false;
   private lastMediaSessionPosition: number = -1;
+  private isChangingTrack: boolean = false;
 
   // React Callbacks for UI updates
   private stateChangeCallbacks: ((state: PlayerState) => void)[] = [];
@@ -140,7 +141,7 @@ class SpinampAudioEngine {
       // Attach audio element event listeners
       this.audioElement.addEventListener('play', () => this.onPlayStateChange(true));
       this.audioElement.addEventListener('pause', () => {
-        if (this.expectedPauseRef) {
+        if (this.isChangingTrack) {
           return;
         }
 
@@ -541,6 +542,7 @@ class SpinampAudioEngine {
       return;
     }
 
+    this.isChangingTrack = true;
     this.expectedPauseRef = true;
     
     // Explicitly pause and unload previous track media source to prevent old track replay
@@ -606,6 +608,7 @@ class SpinampAudioEngine {
     }
 
     setTimeout(() => {
+      this.isChangingTrack = false;
       this.expectedPauseRef = false;
     }, 200);
   }
@@ -842,6 +845,7 @@ class SpinampAudioEngine {
         }
         this.expectedPauseRef = true;
         this.audioElement.pause();
+        this.onPlayStateChange(false);
         setTimeout(() => { this.expectedPauseRef = false; }, 100);
         this.setPlaybackRateSafe(this.userPlaybackRate);
         if (this.volumeGainNode && this.audioCtx) {
