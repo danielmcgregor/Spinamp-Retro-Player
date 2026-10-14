@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import logoImg from '../assets/logo.png';
+import logoImg from '../assets/logo.jpg';
 
 interface SpinampLogoProps {
   className?: string;
